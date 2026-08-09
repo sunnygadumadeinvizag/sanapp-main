@@ -16,7 +16,7 @@ export default async function ApplicationsPage() {
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
   const applications = await prisma.application.findMany({
-    orderBy: { name: "asc" },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
     include: { _count: { select: { grants: true } } },
   });
 
@@ -35,6 +35,7 @@ export default async function ApplicationsPage() {
     name: a.name,
     description: a.description,
     url: a.url,
+    category: a.category,
     enabled: a.enabled,
     openInNewTab: a.openInNewTab,
     _count: a._count,
@@ -80,6 +81,7 @@ export default async function ApplicationsPage() {
               <thead>
                 <tr>
                   <th>Application</th>
+                  <th>Category</th>
                   <th>OIDC client</th>
                   <th>Status</th>
                   <th>URL</th>
@@ -91,6 +93,9 @@ export default async function ApplicationsPage() {
                     <td>
                       <strong>{a.name}</strong>
                       {a.description && <div className="iipe-muted">{a.description}</div>}
+                    </td>
+                    <td>
+                      <span className="iipe-badge">{a.category || "General"}</span>
                     </td>
                     <td>
                       <code>{a.clientId}</code>

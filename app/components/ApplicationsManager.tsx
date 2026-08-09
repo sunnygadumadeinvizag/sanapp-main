@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export type ManagedApp = {
   id: string;
@@ -8,6 +8,7 @@ export type ManagedApp = {
   name: string;
   description: string | null;
   url: string;
+  category: string;
   enabled: boolean;
   openInNewTab: boolean;
   _count: { grants: number };
@@ -25,6 +26,7 @@ type Draft = {
   description: string;
   clientId: string;
   url: string;
+  category: string;
   enabled: boolean;
   openInNewTab: boolean;
 };
@@ -36,9 +38,12 @@ const EMPTY_DRAFT: Draft = {
   description: "",
   clientId: "",
   url: "",
+  category: "General",
   enabled: true,
   openInNewTab: true,
 };
+
+const CATEGORY_SUGGESTIONS = ["Academic", "Finance", "ESTB", "Admin", "HR", "Examination", "Library"];
 
 export function ApplicationsManager({
   initialApps,
@@ -65,6 +70,12 @@ export function ApplicationsManager({
     return data;
   }
 
+  const existingCategories = useMemo(
+    () => Array.from(new Set(apps.map((a) => a.category).filter(Boolean))).sort(),
+    [apps]
+  );
+  const categoryOptions = Array.from(new Set([...CATEGORY_SUGGESTIONS, ...existingCategories])).sort();
+
   function openAdd() {
     setDraft({ ...EMPTY_DRAFT, clientId: ssoClients[0]?.clientId ?? "" });
     setModal({ mode: "add" });
@@ -76,6 +87,7 @@ export function ApplicationsManager({
       description: app.description ?? "",
       clientId: app.clientId,
       url: app.url,
+      category: app.category || "General",
       enabled: app.enabled,
       openInNewTab: app.openInNewTab,
     });
@@ -101,6 +113,7 @@ export function ApplicationsManager({
         description: draft.description,
         clientId: draft.clientId,
         url: draft.url,
+        category: draft.category.trim() || "General",
         enabled: draft.enabled,
         openInNewTab: draft.openInNewTab,
       };
@@ -209,6 +222,7 @@ export function ApplicationsManager({
           <thead>
             <tr>
               <th>Application</th>
+              <th>Category</th>
               <th>OIDC client</th>
               <th>Status</th>
               <th>Opens in</th>
@@ -222,6 +236,9 @@ export function ApplicationsManager({
                 <td>
                   <strong>{a.name}</strong>
                   {a.description && <div className="iipe-muted">{a.description}</div>}
+                </td>
+                <td>
+                  <span className="iipe-badge">{a.category || "General"}</span>
                 </td>
                 <td>
                   <code>{a.clientId}</code>
@@ -258,7 +275,7 @@ export function ApplicationsManager({
             ))}
             {apps.length === 0 && (
               <tr>
-                <td colSpan={6} className="iipe-muted">
+                <td colSpan={7} className="iipe-muted">
                   No applications registered yet.
                 </td>
               </tr>
@@ -310,6 +327,25 @@ export function ApplicationsManager({
                 value={draft.url}
                 onChange={(e) => setDraft({ ...draft, url: e.target.value })}
               />
+            </div>
+            <div className="iipe-field">
+              <label className="iipe-label" htmlFor="am-category">Category</label>
+              <input
+                id="am-category"
+                className="iipe-input"
+                list="am-category-options"
+                placeholder="e.g. Finance, ESTB, Admin, Academic"
+                value={draft.category}
+                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              />
+              <datalist id="am-category-options">
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <p className="iipe-muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                Applications are grouped under this heading in the My Apps launcher.
+              </p>
             </div>
             <div className="iipe-field">
               <label className="iipe-label" htmlFor="am-client">OIDC client (registered in the SSO)</label>

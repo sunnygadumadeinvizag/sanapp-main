@@ -36,6 +36,7 @@ type AppInput = {
   name?: string;
   description?: string | null;
   url?: string;
+  category?: string;
   enabled?: boolean;
   openInNewTab?: boolean;
 };
@@ -47,6 +48,10 @@ function normalize(body: Record<string, unknown>): AppInput {
     description:
       typeof body.description === "string" ? body.description.trim() || null : undefined,
     url: typeof body.url === "string" ? body.url.trim() : undefined,
+    category:
+      typeof body.category === "string" && body.category.trim().length > 0
+        ? body.category.trim()
+        : undefined,
     enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
     openInNewTab: typeof body.openInNewTab === "boolean" ? body.openInNewTab : undefined,
   };
@@ -64,7 +69,7 @@ export async function GET() {
   }
 
   const apps = await prisma.application.findMany({
-    orderBy: { name: "asc" },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
     include: { _count: { select: { grants: true } } },
   });
   return NextResponse.json({ applications: apps });
@@ -118,6 +123,7 @@ export async function POST(request: NextRequest) {
       name: body.name,
       description: body.description ?? null,
       url: body.url,
+      category: body.category ?? "General",
       enabled: body.enabled ?? true,
       openInNewTab: body.openInNewTab ?? true,
     },
@@ -179,6 +185,7 @@ export async function PATCH(request: NextRequest) {
       ...(body.name ? { name: body.name } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.url ? { url: body.url } : {}),
+      ...(body.category ? { category: body.category } : {}),
       ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
       ...(body.openInNewTab !== undefined ? { openInNewTab: body.openInNewTab } : {}),
     },

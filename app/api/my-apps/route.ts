@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
       enabled: true,
       grants: { some: { OR: [{ userId: userId ?? undefined }, { username }] } },
     },
-    orderBy: { name: "asc" },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
     select: {
       clientId: true,
       name: true,
       description: true,
       url: true,
+      category: true,
       openInNewTab: true,
     },
   });

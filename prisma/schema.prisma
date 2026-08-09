@@ -19,6 +19,8 @@ model Application {
   name         String
   description  String?
   url          String
+  // Grouping used by the My Apps launcher (e.g. Finance, ESTB, Admin, Academic).
+  category     String           @default("General")
   enabled      Boolean          @default(true)
   // How the app should be opened from launchers/menus: new tab vs same tab.
   openInNewTab Boolean          @default(true)
