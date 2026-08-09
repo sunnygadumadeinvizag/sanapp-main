@@ -60,11 +60,14 @@ export function ApplicationsManager({
   const [notice, setNotice] = useState<string | null>(null);
 
   async function api(path: string, method: string, body: unknown) {
-    const res = await fetch(path, {
+    const init: RequestInit = {
       method,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    };
+    if (method !== "GET" && method !== "HEAD") {
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, init);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "Request failed");
     return data;
