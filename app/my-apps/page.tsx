@@ -22,14 +22,16 @@ export default async function MyAppsPage() {
     .map((g) => g.application)
     .filter((a) => a.enabled);
 
+  const navItems = [
+    { label: "Dashboard", href: "/" },
+    { label: "My Apps", href: "/my-apps", active: true },
+    { label: "Applications", href: "/applications" },
+  ];
+
   return (
     <PageShell
       header={{
-        navItems: [
-          { label: "Dashboard", href: "/" },
-          { label: "My Apps", href: "/my-apps", active: true },
-          { label: "Applications", href: "/applications" },
-        ],
+        navItems,
         right: me ? (
           <UserMenu name={me.name} email={me.email} role="Access Administrator" signOutHref="/api/logout">
             <a href="http://localhost:3000/account">SSO Profile</a>
@@ -37,9 +39,7 @@ export default async function MyAppsPage() {
         ) : undefined,
       }}
       sidebarItems={[
-        { label: "Dashboard", href: "/" },
-        { label: "My Apps", href: "/my-apps", active: true },
-        { label: "Applications", href: "/applications" },
+        ...navItems,
         { label: "SSO (identity)", href: "http://localhost:3000" },
       ]}
     >
@@ -71,8 +71,14 @@ export default async function MyAppsPage() {
                   {a.description}
                 </p>
               )}
-              <a className="iipe-btn" href={a.url} target="_blank" rel="noreferrer">
+              <a
+                className="iipe-btn"
+                href={a.url}
+                target={a.openInNewTab ? "_blank" : "_self"}
+                rel={a.openInNewTab ? "noreferrer" : undefined}
+              >
                 Open {a.name}
+                {a.openInNewTab ? " ↗" : ""}
               </a>
             </div>
           ))}

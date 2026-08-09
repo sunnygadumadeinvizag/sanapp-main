@@ -14,14 +14,16 @@ datasource db {
 // ------------------------------------------------------------------
 
 model Application {
-  id          String           @id @default(uuid())
-  clientId    String           @unique // matches the OIDC client id registered in the SSO
-  name        String
-  description String?
-  url         String
-  enabled     Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  grants      UserApplication[]
+  id           String           @id @default(uuid())
+  clientId     String           @unique // matches the OIDC client id registered in the SSO
+  name         String
+  description  String?
+  url          String
+  enabled      Boolean          @default(true)
+  // How the app should be opened from launchers/menus: new tab vs same tab.
+  openInNewTab Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  grants       UserApplication[]
 }
 
 // A grant = "this user may open this application".

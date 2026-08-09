@@ -167,8 +167,13 @@ export default async function DashboardPage({
                 <div key={a.id} className="iipe-card" style={{ marginBottom: 0 }}>
                   <h3 style={{ marginBottom: 4 }}>{a.name}</h3>
                   {a.description && <p className="iipe-muted" style={{ marginTop: 0 }}>{a.description}</p>}
-                  <a className="iipe-btn" href={a.url} target="_blank" rel="noreferrer">
-                    Open application →
+                  <a
+                    className="iipe-btn"
+                    href={a.url}
+                    target={a.openInNewTab ? "_blank" : "_self"}
+                    rel={a.openInNewTab ? "noreferrer" : undefined}
+                  >
+                    Open application {a.openInNewTab ? "↗" : "→"}
                   </a>
                 </div>
               ))}

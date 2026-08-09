@@ -24,7 +24,13 @@ export async function POST(request: NextRequest) {
       grants: { some: { OR: [{ userId: userId ?? undefined }, { username }] } },
     },
     orderBy: { name: "asc" },
-    select: { clientId: true, name: true, description: true, url: true },
+    select: {
+      clientId: true,
+      name: true,
+      description: true,
+      url: true,
+      openInNewTab: true,
+    },
   });
 
   return NextResponse.json({ apps });
