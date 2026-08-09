@@ -8,13 +8,16 @@ const CLIENT_SECRET = process.env.MAIN_CLIENT_SECRET!;
 
 export async function GET(request: NextRequest) {
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const proto = request.headers.get("x-forwarded-proto") ?? "http";
+const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
+const publicOrigin = `${proto}://${host}`;
   const url = request.nextUrl;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
 
   const storedState = request.cookies.get("main_oauth_state")?.value;
   if (!code || !state || state !== storedState) {
-    return NextResponse.redirect(new URL(BASE_PATH + "/?error=state_mismatch", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=state_mismatch", publicOrigin));
   }
 
   // 1. Exchange the authorization code for tokens at the SSO token endpoint.
@@ -31,7 +34,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL(BASE_PATH + "/?error=token_failed", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=token_failed", publicOrigin));
   }
   const tokens = await tokenRes.json();
 
@@ -40,7 +43,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
     headers: { authorization: `Bearer ${tokens.access_token}` },
   });
   if (!userRes.ok) {
-    return NextResponse.redirect(new URL(BASE_PATH + "/?error=userinfo_failed", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=userinfo_failed", publicOrigin));
   }
   const user = await userRes.json();
 
@@ -57,14 +60,14 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
   const safeReturn =
     returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
 
-  const res = NextResponse.redirect(new URL(safeReturn.startsWith(BASE_PATH) ? safeReturn : BASE_PATH + safeReturn, request.url));
+  const res = NextResponse.redirect(new URL(safeReturn.startsWith(BASE_PATH) ? safeReturn : BASE_PATH + safeReturn, publicOrigin));
   res.cookies.delete("main_return_to");
   res.cookies.set("main_session", session, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 8,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.COOKIE_SECURE === "true",
   });
   res.cookies.delete("main_oauth_state");
   return res;
