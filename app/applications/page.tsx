@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { ApplicationsManager, type ManagedApp, type SsoClient } from "../components/ApplicationsManager";
@@ -7,6 +7,7 @@ import { ApplicationsManager, type ManagedApp, type SsoClient } from "../compone
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
+const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
 const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY!;
 
 export default async function ApplicationsPage() {
@@ -41,11 +42,18 @@ export default async function ApplicationsPage() {
     _count: a._count,
   }));
 
-  const navItems = [
-    { label: "Dashboard", href: "/" },
+  const navItems = getPlatformNav({
+    mainBaseUrl: MAIN_BASE_URL,
+    ssoBaseUrl: SSO_BASE_URL,
+    active: "applications",
+  });
+  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
+    { label: "Home", href: "/" },
     { label: "My Apps", href: "/my-apps" },
     { label: "Applications", href: "/applications", active: true },
     ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
+    { label: "My Account", href: `${SSO_BASE_URL}/account` },
+    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -54,14 +62,12 @@ export default async function ApplicationsPage() {
         navItems,
         right: me ? (
           <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
-            <a href="http://localhost:3000/account">SSO Profile</a>
+            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
           </UserMenu>
         ) : undefined,
       }}
-      sidebarItems={[
-        ...navItems,
-        { label: "SSO (identity)", href: "http://localhost:3000" },
-      ]}
+      sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
       <h1 className="iipe-page-title">Applications</h1>

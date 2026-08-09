@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { UsersManager, type UserRow } from "../components/UsersManager";
@@ -7,6 +7,7 @@ import { UsersManager, type UserRow } from "../components/UsersManager";
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
+const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
 const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY!;
 
 export default async function UsersPage() {
@@ -39,11 +40,17 @@ export default async function UsersPage() {
     appCount: countByUser.get(u.username) ?? 0,
   }));
 
-  const navItems = [
-    { label: "Dashboard", href: "/" },
+  const navItems = getPlatformNav({
+    mainBaseUrl: MAIN_BASE_URL,
+    ssoBaseUrl: SSO_BASE_URL,
+  });
+  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
+    { label: "Home", href: "/" },
     { label: "My Apps", href: "/my-apps" },
     { label: "Applications", href: "/applications" },
     ...(isSuperAdmin ? [{ label: "Users", href: "/users", active: true }] : []),
+    { label: "My Account", href: `${SSO_BASE_URL}/account` },
+    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -51,18 +58,13 @@ export default async function UsersPage() {
       header={{
         navItems,
         right: me ? (
-          <UserMenu name={me.name} email={me.email} role="Access Administrator" signOutHref="/api/logout">
-            <a href="http://localhost:3000/account">SSO Profile</a>
+          <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
+            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
           </UserMenu>
         ) : undefined,
       }}
-      sidebarItems={[
-        { label: "Dashboard", href: "/" },
-        { label: "My Apps", href: "/my-apps" },
-        { label: "Applications", href: "/applications" },
-        ...(isSuperAdmin ? [{ label: "Users", href: "/users", active: true }] : []),
-        { label: "SSO (identity)", href: "http://localhost:3000" },
-      ]}
+      sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
       <h1 className="iipe-page-title">User Management</h1>

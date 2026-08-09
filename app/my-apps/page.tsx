@@ -1,15 +1,19 @@
 import { cookies } from "next/headers";
-import { PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { MyAppsView, type MyAppEntry } from "../components/MyAppsView";
 
 export const dynamic = "force-dynamic";
 
+const SSO_BASE_URL = process.env.SSO_BASE_URL!;
+const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
+
 export default async function MyAppsPage() {
   const store = await cookies();
   const session = store.get("main_session")?.value ?? "";
   const me = await verifyMainSession(session);
+  const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
   if (!me) {
     return <p className="iipe-container">Session not found.</p>;
@@ -31,10 +35,18 @@ export default async function MyAppsPage() {
       openInNewTab: a.openInNewTab,
     }));
 
-  const navItems = [
-    { label: "Dashboard", href: "/" },
+  const navItems = getPlatformNav({
+    mainBaseUrl: MAIN_BASE_URL,
+    ssoBaseUrl: SSO_BASE_URL,
+    active: "my-apps",
+  });
+  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
+    { label: "Home", href: "/" },
     { label: "My Apps", href: "/my-apps", active: true },
     { label: "Applications", href: "/applications" },
+    ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
+    { label: "My Account", href: `${SSO_BASE_URL}/account` },
+    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -42,15 +54,13 @@ export default async function MyAppsPage() {
       header={{
         navItems,
         right: me ? (
-          <UserMenu name={me.name} email={me.email} role="Access Administrator" signOutHref="/api/logout">
-            <a href="http://localhost:3000/account">SSO Profile</a>
+          <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
+            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
           </UserMenu>
         ) : undefined,
       }}
-      sidebarItems={[
-        ...navItems,
-        { label: "SSO (identity)", href: "http://localhost:3000" },
-      ]}
+      sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
       <h1 className="iipe-page-title">My applications</h1>

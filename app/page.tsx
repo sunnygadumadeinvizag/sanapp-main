@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { AccessMatrix, type MatrixApp, type MatrixGrant, type MatrixUser } from "./components/AccessMatrix";
@@ -7,6 +7,7 @@ import { AccessMatrix, type MatrixApp, type MatrixGrant, type MatrixUser } from 
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
+const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
 const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY!;
 
 export default async function DashboardPage({
@@ -54,15 +55,18 @@ export default async function DashboardPage({
     grants.some((g) => g.username === me?.username && g.applicationId === a.id && a.enabled)
   );
 
-  const navItems = [
-    { label: "Dashboard", href: "/", active: true },
+  const navItems = getPlatformNav({
+    mainBaseUrl: MAIN_BASE_URL,
+    ssoBaseUrl: SSO_BASE_URL,
+    active: "home",
+  });
+  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
+    { label: "Home", href: "/", active: true },
     { label: "My Apps", href: "/my-apps" },
     { label: "Applications", href: "/applications" },
     ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
-  ];
-  const sidebarItems = [
-    ...navItems,
-    { label: "SSO (identity)", href: "http://localhost:3000" },
+    { label: "My Account", href: `${SSO_BASE_URL}/account` },
+    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -76,7 +80,8 @@ export default async function DashboardPage({
             role={isSuperAdmin ? "Super Admin" : "User"}
             signOutHref="/api/logout"
           >
-            <a href="http://localhost:3000/account">SSO Profile</a>
+            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
           </UserMenu>
         ) : undefined,
       }}
