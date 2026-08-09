@@ -8,6 +8,8 @@ export type MainUser = {
   username: string;
   name: string;
   email: string;
+  /** SSO identity role: "SUPER_ADMIN" | "USER" (defaults to "USER"). */
+  role: string;
 };
 
 // Session policy (seconds/minutes; overridable via env in production).
@@ -25,6 +27,7 @@ export async function createMainSession(user: MainUser): Promise<string> {
     username: user.username,
     name: user.name,
     email: user.email,
+    role: user.role || "USER",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.sub)
@@ -44,6 +47,7 @@ export async function verifyMainSessionFull(token: string): Promise<SessionMeta 
         username: String(payload.username ?? ""),
         name: String(payload.name ?? ""),
         email: String(payload.email ?? ""),
+        role: String(payload.role ?? "USER"),
       },
       exp: payload.exp,
       iat: payload.iat,

@@ -10,10 +10,12 @@ export function AccessMatrix({
   users,
   applications,
   initialGrants,
+  focusUsername,
 }: {
   users: MatrixUser[];
   applications: MatrixApp[];
   initialGrants: MatrixGrant[];
+  focusUsername?: string;
 }) {
   const [grants, setGrants] = useState<MatrixGrant[]>(initialGrants);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function AccessMatrix({
   return (
     <div>
       {error && <div className="iipe-alert danger">{error}</div>}
-      <div style={{ overflowX: "auto" }}>
+      <div className="iipe-table-scroll">
         <table className="iipe-table">
           <thead>
             <tr>
@@ -73,7 +75,14 @@ export function AccessMatrix({
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id}>
+              <tr
+                key={user.id}
+                style={
+                  focusUsername && focusUsername === user.username
+                    ? { background: "var(--iipe-primary-light)" }
+                    : undefined
+                }
+              >
                 <td>
                   <strong>{user.name}</strong>
                   <div className="iipe-muted">@{user.username}</div>

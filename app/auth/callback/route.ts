@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     username: user.username,
     name: user.name,
     email: user.email,
+    role: user.role ?? "USER",
   });
 
   const returnTo = request.cookies.get("main_return_to")?.value ?? "/";

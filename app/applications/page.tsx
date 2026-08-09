@@ -9,26 +9,29 @@ export default async function ApplicationsPage() {
   const store = await cookies();
   const session = store.get("main_session")?.value ?? "";
   const me = await verifyMainSession(session);
+  const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
   const applications = await prisma.application.findMany({ orderBy: { name: "asc" } });
+
+  const navItems = [
+    { label: "Dashboard", href: "/" },
+    { label: "My Apps", href: "/my-apps" },
+    { label: "Applications", href: "/applications", active: true },
+    ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
+  ];
 
   return (
     <PageShell
       header={{
-        navItems: [
-          { label: "Dashboard", href: "/" },
-          { label: "Applications", href: "/applications", active: true },
-        ],
+        navItems,
         right: me ? (
-          <UserMenu name={me.name} email={me.email} role="Access Administrator" signOutHref="/api/logout">
+          <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
             <a href="http://localhost:3000/account">SSO Profile</a>
           </UserMenu>
         ) : undefined,
       }}
       sidebarItems={[
-        { label: "Dashboard", href: "/" },
-        { label: "My Apps", href: "/my-apps" },
-        { label: "Applications", href: "/applications", active: true },
+        ...navItems,
         { label: "SSO (identity)", href: "http://localhost:3000" },
       ]}
     >
@@ -40,41 +43,43 @@ export default async function ApplicationsPage() {
       </p>
 
       <div className="iipe-card">
-        <table className="iipe-table">
-          <thead>
-            <tr>
-              <th>Application</th>
-              <th>OIDC client</th>
-              <th>Status</th>
-              <th>URL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {applications.map((a) => (
-              <tr key={a.id}>
-                <td>
-                  <strong>{a.name}</strong>
-                  {a.description && <div className="iipe-muted">{a.description}</div>}
-                </td>
-                <td>
-                  <code>{a.clientId}</code>
-                </td>
-                <td>
-                  {a.enabled ? (
-                    <span className="iipe-badge">Enabled</span>
-                  ) : (
-                    <span className="iipe-badge danger">Disabled</span>
-                  )}
-                </td>
-                <td>
-                  <a href={a.url} target="_blank" rel="noreferrer">
-                    {a.url}
-                  </a>
-                </td>
+        <div className="iipe-table-scroll">
+          <table className="iipe-table">
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>OIDC client</th>
+                <th>Status</th>
+                <th>URL</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {applications.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <strong>{a.name}</strong>
+                    {a.description && <div className="iipe-muted">{a.description}</div>}
+                  </td>
+                  <td>
+                    <code>{a.clientId}</code>
+                  </td>
+                  <td>
+                    {a.enabled ? (
+                      <span className="iipe-badge">Enabled</span>
+                    ) : (
+                      <span className="iipe-badge danger">Disabled</span>
+                    )}
+                  </td>
+                  <td>
+                    <a href={a.url} target="_blank" rel="noreferrer">
+                      {a.url}
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </PageShell>
   );

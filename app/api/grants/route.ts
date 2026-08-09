@@ -5,13 +5,17 @@ import { verifyMainSession } from "@/lib/session";
 
 /**
  * POST { userId?, username, clientId, allowed }
- * Grants or revokes application access. Requires a valid Main session.
+ * Grants or revokes application access. Requires a SUPER_ADMIN Main session.
  */
 export async function POST(request: NextRequest) {
   const store = await cookies();
   const session = store.get("main_session")?.value;
-  if (!session || !(await verifyMainSession(session))) {
+  if (!session) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const me = await verifyMainSession(session);
+  if (!me || me.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));
