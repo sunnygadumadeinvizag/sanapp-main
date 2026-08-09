@@ -56,6 +56,7 @@ export default async function ApplicationsPage() {
           { label: "Users", href: "/users" },
           { label: "Departments", href: "/departments" },
           { label: "Announcements", href: "/announcements" },
+          { label: "Theme & Branding", href: "/theme" },
         ]
       : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },

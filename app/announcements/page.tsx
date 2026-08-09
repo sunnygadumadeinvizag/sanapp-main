@@ -53,6 +53,7 @@ export default async function AnnouncementsPage() {
           { label: "Users", href: "/users" },
           { label: "Departments", href: "/departments" },
           { label: "Announcements", href: "/announcements", active: true },
+          { label: "Theme & Branding", href: "/theme" },
         ]
       : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
