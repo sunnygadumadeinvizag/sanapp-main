@@ -28,6 +28,12 @@ type SsoUser = {
   course: { id: string; name: string } | null;
   guideId: string | null;
   guide: { id: string; name: string } | null;
+  rollNo: string | null;
+  empNo: string | null;
+  gender: string | null;
+  phCategory: string | null;
+  nonInstituteEmail: string | null;
+  emergencyPhone: string | null;
   isActive: boolean;
   avatar: string | null;
   profileLocked: boolean;
@@ -78,6 +84,12 @@ export default async function UsersPage() {
     courseName: u.course?.name ?? null,
     guideId: u.guideId,
     guideName: u.guide?.name ?? null,
+    rollNo: u.rollNo,
+    empNo: u.empNo,
+    gender: u.gender,
+    phCategory: u.phCategory,
+    nonInstituteEmail: u.nonInstituteEmail,
+    emergencyPhone: u.emergencyPhone,
     isActive: u.isActive,
     avatar: u.avatar,
     profileLocked: u.profileLocked,

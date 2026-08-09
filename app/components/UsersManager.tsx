@@ -12,6 +12,12 @@ export type UserRow = {
   employmentType: string | null;
   designation: string | null;
   phone: string | null;
+  rollNo: string | null;
+  empNo: string | null;
+  gender: string | null;
+  phCategory: string | null;
+  nonInstituteEmail: string | null;
+  emergencyPhone: string | null;
   departmentId: string | null;
   departmentName: string | null;
   programmeId: string | null;
@@ -46,6 +52,22 @@ const EMPLOYMENT_TYPES = [
   { value: "OTHER", label: "Other" },
 ];
 
+const GENDERS = [
+  { value: "MALE", label: "Male" },
+  { value: "FEMALE", label: "Female" },
+  { value: "OTHER", label: "Other" },
+];
+
+const PH_CATEGORIES = [
+  { value: "NONE", label: "None" },
+  { value: "OH", label: "Orthopaedically Handicapped (OH)" },
+  { value: "VI", label: "Visually Impaired (VI)" },
+  { value: "HI", label: "Hearing Impaired (HI)" },
+  { value: "LD", label: "Learning Disability (LD)" },
+  { value: "MD", label: "Multiple Disabilities (MD)" },
+  { value: "OTHER", label: "Other" },
+];
+
 type Draft = {
   name: string;
   username: string;
@@ -57,6 +79,12 @@ type Draft = {
   employmentType: string;
   designation: string;
   phone: string;
+  rollNo: string;
+  empNo: string;
+  gender: string;
+  phCategory: string;
+  nonInstituteEmail: string;
+  emergencyPhone: string;
   departmentId: string;
   programmeId: string;
   courseId: string;
@@ -82,6 +110,12 @@ const EMPTY_DRAFT: Draft = {
   employmentType: "",
   designation: "",
   phone: "",
+  rollNo: "",
+  empNo: "",
+  gender: "",
+  phCategory: "",
+  nonInstituteEmail: "",
+  emergencyPhone: "",
   departmentId: "",
   programmeId: "",
   courseId: "",
@@ -117,6 +151,12 @@ function rowFromUser(u: Record<string, unknown>, appCount: number): UserRow {
     employmentType: u.employmentType ? String(u.employmentType) : null,
     designation: u.designation ? String(u.designation) : null,
     phone: u.phone ? String(u.phone) : null,
+    rollNo: u.rollNo ? String(u.rollNo) : null,
+    empNo: u.empNo ? String(u.empNo) : null,
+    gender: u.gender ? String(u.gender) : null,
+    phCategory: u.phCategory ? String(u.phCategory) : null,
+    nonInstituteEmail: u.nonInstituteEmail ? String(u.nonInstituteEmail) : null,
+    emergencyPhone: u.emergencyPhone ? String(u.emergencyPhone) : null,
     departmentId: u.departmentId ? String(u.departmentId) : null,
     departmentName: dep?.name ?? null,
     programmeId: u.programmeId ? String(u.programmeId) : null,
@@ -178,6 +218,8 @@ export function UsersManager({
 
   const isStaff =
     draft.primaryRole === "STAFF_TEACHING" || draft.primaryRole === "STAFF_NON_TEACHING";
+  const isStudentOrScholar =
+    draft.primaryRole === "STUDENT" || draft.primaryRole === "SCHOLAR";
 
   async function api(path: string, method: string, body: unknown) {
     const res = await fetch(path, {
@@ -201,25 +243,35 @@ export function UsersManager({
       departmentId: draft.departmentId || null,
       designation: draft.designation || null,
       phone: draft.phone || null,
+      gender: draft.gender || null,
+      phCategory: draft.phCategory || null,
+      nonInstituteEmail: draft.nonInstituteEmail || null,
+      emergencyPhone: draft.emergencyPhone || null,
     };
     if (includePassword && draft.password) body.password = draft.password;
     if (isStaff) {
       body.employmentType = draft.employmentType || null;
+      body.empNo = draft.empNo || null;
+      body.rollNo = null;
     } else {
       body.employmentType = null;
+      body.empNo = null;
     }
     if (draft.primaryRole === "STUDENT") {
       body.programmeId = draft.programmeId || null;
       body.courseId = draft.courseId || null;
       body.guideId = null;
+      body.rollNo = draft.rollNo || null;
     } else if (draft.primaryRole === "SCHOLAR") {
       body.guideId = draft.guideId || null;
       body.programmeId = draft.programmeId || null;
       body.courseId = null;
+      body.rollNo = draft.rollNo || null;
     } else {
       body.programmeId = null;
       body.courseId = null;
       body.guideId = null;
+      body.rollNo = null;
     }
     return body;
   }
@@ -245,6 +297,12 @@ export function UsersManager({
       employmentType: user.employmentType ?? "",
       designation: user.designation ?? "",
       phone: user.phone ?? "",
+      rollNo: user.rollNo ?? "",
+      empNo: user.empNo ?? "",
+      gender: user.gender ?? "",
+      phCategory: user.phCategory ?? "",
+      nonInstituteEmail: user.nonInstituteEmail ?? "",
+      emergencyPhone: user.emergencyPhone ?? "",
       departmentId: user.departmentId ?? "",
       programmeId: user.programmeId ?? "",
       courseId: user.courseId ?? "",
@@ -264,16 +322,36 @@ export function UsersManager({
       setError("Select a department / section — every user belongs to one.");
       return;
     }
+    if (!draft.gender) {
+      setError("Select a gender — required for every user.");
+      return;
+    }
+    if (!draft.phCategory) {
+      setError("Select a PH category — required for every user (use None when not applicable).");
+      return;
+    }
     if (isStaff && !draft.employmentType) {
       setError("Select an employment type for staff.");
+      return;
+    }
+    if (isStaff && !draft.empNo.trim()) {
+      setError("Enter the employee number — required for staff.");
       return;
     }
     if (draft.primaryRole === "STUDENT" && (!draft.programmeId || !draft.courseId)) {
       setError("Select a programme and course for the student.");
       return;
     }
+    if (isStudentOrScholar && !draft.rollNo.trim()) {
+      setError("Enter the roll number — required for students and scholars.");
+      return;
+    }
     if (draft.primaryRole === "SCHOLAR" && !draft.guideId) {
       setError("Select a guide for the scholar.");
+      return;
+    }
+    if (draft.nonInstituteEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.nonInstituteEmail.trim())) {
+      setError("Non-institute email is not a valid address (or leave it blank).");
       return;
     }
 
@@ -397,7 +475,13 @@ export function UsersManager({
       const listRes = await fetch("/api/users", { cache: "no-store" });
       if (listRes.ok) {
         const list = await listRes.json();
-        if (Array.isArray(list.users)) setUsers(list.users.map((u: unknown) => { const r = u as Record<string, unknown>; return rowFromUser(r, Number(r.appCount ?? 0)); }));
+        if (Array.isArray(list.users))
+          setUsers(
+            list.users.map((u: unknown) => {
+              const r = u as Record<string, unknown>;
+              return rowFromUser(r, Number(r.appCount ?? 0));
+            })
+          );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
@@ -408,13 +492,18 @@ export function UsersManager({
 
   function profileDetail(u: UserRow) {
     if (u.primaryRole === "STUDENT") {
-      return [u.programmeName, u.courseName].filter(Boolean).join(" · ");
+      return [u.rollNo ? `Roll ${u.rollNo}` : "", u.programmeName, u.courseName]
+        .filter(Boolean)
+        .join(" · ");
     }
     if (u.primaryRole === "SCHOLAR") {
-      return u.guideName ? `Guide: ${u.guideName}` : "";
+      return [u.rollNo ? `Roll ${u.rollNo}` : "", u.guideName ? `Guide: ${u.guideName}` : ""]
+        .filter(Boolean)
+        .join(" · ");
     }
     if (u.primaryRole === "STAFF_TEACHING" || u.primaryRole === "STAFF_NON_TEACHING") {
       return [
+        u.empNo ? `Emp ${u.empNo}` : "",
         u.designation,
         u.employmentType ? `(${u.employmentType.replace(/_/g, " ").toLowerCase()})` : "",
       ]
@@ -784,8 +873,22 @@ export function UsersManager({
               </select>
             </div>
 
+            {/* Required for the chosen role: employee number for staff, roll number for students/scholars */}
             {isStaff && (
               <div className="iipe-row" style={{ gap: 12 }}>
+                <div className="iipe-field" style={{ flex: 1 }}>
+                  <label className="iipe-label" htmlFor="um-emp-no">
+                    Employee number <span className="iipe-muted">(required)</span>
+                  </label>
+                  <input
+                    id="um-emp-no"
+                    className="iipe-input"
+                    required
+                    placeholder="e.g. IPE-T-001"
+                    value={draft.empNo}
+                    onChange={(e) => setDraft({ ...draft, empNo: e.target.value })}
+                  />
+                </div>
                 <div className="iipe-field" style={{ flex: 1 }}>
                   <label className="iipe-label" htmlFor="um-emp-type">
                     Employment type <span className="iipe-muted">(required)</span>
@@ -805,15 +908,75 @@ export function UsersManager({
                     ))}
                   </select>
                 </div>
-                <div className="iipe-field" style={{ flex: 1 }}>
-                  <label className="iipe-label" htmlFor="um-designation">Designation</label>
-                  <input
-                    id="um-designation"
-                    className="iipe-input"
-                    value={draft.designation}
-                    onChange={(e) => setDraft({ ...draft, designation: e.target.value })}
-                  />
-                </div>
+              </div>
+            )}
+
+            {isStudentOrScholar && (
+              <div className="iipe-field">
+                <label className="iipe-label" htmlFor="um-roll-no">
+                  Roll number <span className="iipe-muted">(required for students &amp; scholars)</span>
+                </label>
+                <input
+                  id="um-roll-no"
+                  className="iipe-input"
+                  required
+                  placeholder="e.g. 21PE3012"
+                  value={draft.rollNo}
+                  onChange={(e) => setDraft({ ...draft, rollNo: e.target.value })}
+                />
+              </div>
+            )}
+
+            <div className="iipe-row" style={{ gap: 12 }}>
+              <div className="iipe-field" style={{ flex: 1 }}>
+                <label className="iipe-label" htmlFor="um-gender">
+                  Gender <span className="iipe-muted">(required)</span>
+                </label>
+                <select
+                  id="um-gender"
+                  className="iipe-select"
+                  required
+                  value={draft.gender}
+                  onChange={(e) => setDraft({ ...draft, gender: e.target.value })}
+                >
+                  <option value="">— Select gender —</option>
+                  {GENDERS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="iipe-field" style={{ flex: 1 }}>
+                <label className="iipe-label" htmlFor="um-ph-cat">
+                  PH category <span className="iipe-muted">(required)</span>
+                </label>
+                <select
+                  id="um-ph-cat"
+                  className="iipe-select"
+                  required
+                  value={draft.phCategory}
+                  onChange={(e) => setDraft({ ...draft, phCategory: e.target.value })}
+                >
+                  <option value="">— Select category —</option>
+                  {PH_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {isStaff && (
+              <div className="iipe-field">
+                <label className="iipe-label" htmlFor="um-designation">Designation</label>
+                <input
+                  id="um-designation"
+                  className="iipe-input"
+                  value={draft.designation}
+                  onChange={(e) => setDraft({ ...draft, designation: e.target.value })}
+                />
               </div>
             )}
 
@@ -882,13 +1045,38 @@ export function UsersManager({
               </div>
             )}
 
+            <div className="iipe-row" style={{ gap: 12 }}>
+              <div className="iipe-field" style={{ flex: 1 }}>
+                <label className="iipe-label" htmlFor="um-phone">Phone</label>
+                <input
+                  id="um-phone"
+                  className="iipe-input"
+                  value={draft.phone}
+                  onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                />
+              </div>
+              <div className="iipe-field" style={{ flex: 1 }}>
+                <label className="iipe-label" htmlFor="um-emergency">Emergency phone</label>
+                <input
+                  id="um-emergency"
+                  className="iipe-input"
+                  value={draft.emergencyPhone}
+                  onChange={(e) => setDraft({ ...draft, emergencyPhone: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+            </div>
             <div className="iipe-field">
-              <label className="iipe-label" htmlFor="um-phone">Phone</label>
+              <label className="iipe-label" htmlFor="um-noninst">
+                Non-institute email
+              </label>
               <input
-                id="um-phone"
+                id="um-noninst"
                 className="iipe-input"
-                value={draft.phone}
-                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                type="email"
+                value={draft.nonInstituteEmail}
+                onChange={(e) => setDraft({ ...draft, nonInstituteEmail: e.target.value })}
+                placeholder="personal / alternate email (optional)"
               />
             </div>
 
