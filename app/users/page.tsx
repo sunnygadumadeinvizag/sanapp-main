@@ -29,6 +29,8 @@ type SsoUser = {
   guideId: string | null;
   guide: { id: string; name: string } | null;
   isActive: boolean;
+  avatar: string | null;
+  profileLocked: boolean;
   createdAt: string;
 };
 
@@ -39,10 +41,18 @@ export default async function UsersPage() {
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
   // Users come from the SSO user registry; grants come from main_db.
-  const usersRes = await fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, {
-    cache: "no-store",
-  });
+  const [usersRes, policyRes] = await Promise.all([
+    fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, {
+      cache: "no-store",
+    }),
+    fetch(`${SSO_BASE_URL}/api/admin/profile-policy?key=${SSO_ADMIN_KEY}`, {
+      cache: "no-store",
+    }),
+  ]);
   const ssoUsers: SsoUser[] = usersRes.ok ? (await usersRes.json()).users : [];
+  const initialPolicy: string[] = policyRes.ok
+    ? ((await policyRes.json()).locked ?? [])
+    : [];
 
   const grants = await prisma.userApplication.findMany();
   const countByUser = new Map<string, number>();
@@ -69,6 +79,8 @@ export default async function UsersPage() {
     guideId: u.guideId,
     guideName: u.guide?.name ?? null,
     isActive: u.isActive,
+    avatar: u.avatar,
+    profileLocked: u.profileLocked,
     createdAt: u.createdAt,
     appCount: countByUser.get(u.username) ?? 0,
   }));
@@ -174,6 +186,8 @@ export default async function UsersPage() {
                 programmes={programmes}
                 courses={courses}
                 guides={guides}
+                ssoBaseUrl={SSO_BASE_URL}
+                initialPolicy={initialPolicy}
               />
             </div>
           ) : (

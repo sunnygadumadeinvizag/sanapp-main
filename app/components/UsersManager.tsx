@@ -21,6 +21,8 @@ export type UserRow = {
   guideId: string | null;
   guideName: string | null;
   isActive: boolean;
+  avatar: string | null;
+  profileLocked: boolean;
   createdAt: string;
   appCount: number;
 };
@@ -63,6 +65,12 @@ type Draft = {
 
 type ModalState = { mode: "add" } | { mode: "edit"; user: UserRow } | null;
 
+type ImportResult = {
+  created: number;
+  failed: number;
+  errors: Array<{ row: number; username: string; error: string }>;
+};
+
 const EMPTY_DRAFT: Draft = {
   name: "",
   username: "",
@@ -80,18 +88,67 @@ const EMPTY_DRAFT: Draft = {
   guideId: "",
 };
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
+}
+
+/**
+ * The SSO returns users with nested relation objects (department: { id, name }).
+ * Normalize that shape into the flat UserRow used by this table so a lock /
+ * activate / edit response keeps the department and profile details visible.
+ */
+function rowFromUser(u: Record<string, unknown>, appCount: number): UserRow {
+  const dep = u.department as { id: string; name: string } | null | undefined;
+  const prog = u.programme as { id: string; name: string } | null | undefined;
+  const crs = u.course as { id: string; name: string } | null | undefined;
+  const guide = u.guide as { id: string; name: string } | null | undefined;
+  return {
+    id: String(u.id),
+    username: String(u.username),
+    name: String(u.name),
+    email: u.email ? String(u.email) : "",
+    role: String(u.role ?? "USER"),
+    primaryRole: String(u.primaryRole ?? "GUEST"),
+    employmentType: u.employmentType ? String(u.employmentType) : null,
+    designation: u.designation ? String(u.designation) : null,
+    phone: u.phone ? String(u.phone) : null,
+    departmentId: u.departmentId ? String(u.departmentId) : null,
+    departmentName: dep?.name ?? null,
+    programmeId: u.programmeId ? String(u.programmeId) : null,
+    programmeName: prog?.name ?? null,
+    courseId: u.courseId ? String(u.courseId) : null,
+    courseName: crs?.name ?? null,
+    guideId: u.guideId ? String(u.guideId) : null,
+    guideName: guide?.name ?? null,
+    isActive: Boolean(u.isActive),
+    avatar: u.avatar ? String(u.avatar) : null,
+    profileLocked: Boolean(u.profileLocked),
+    createdAt: u.createdAt ? String(u.createdAt) : new Date().toISOString(),
+    appCount,
+  };
+}
+
 export function UsersManager({
   initialUsers,
   departments,
   programmes,
   courses,
   guides,
+  ssoBaseUrl,
+  initialPolicy,
 }: {
   initialUsers: UserRow[];
   departments: Option[];
   programmes: Option[];
   courses: Option[];
   guides: Option[];
+  ssoBaseUrl: string;
+  initialPolicy: string[];
 }) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [query, setQuery] = useState("");
@@ -100,6 +157,12 @@ export function UsersManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Profile lock policy (per primary role) + CSV import state.
+  const [policy, setPolicy] = useState<string[]>(initialPolicy);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -161,6 +224,10 @@ export function UsersManager({
     return body;
   }
 
+  function replaceRow(updated: Record<string, unknown>, prev: UserRow): UserRow {
+    return rowFromUser(updated, prev.appCount);
+  }
+
   function openAdd() {
     setDraft(EMPTY_DRAFT);
     setModal({ mode: "add" });
@@ -217,21 +284,21 @@ export function UsersManager({
           ...profileBody(true),
           password: draft.password,
         });
-        const created: UserRow = data.user;
-        setUsers((prev) => [...prev, { ...created, appCount: 0 }].sort((a, b) => a.name.localeCompare(b.name)));
+        const created = rowFromUser(data.user as Record<string, unknown>, 0);
+        setUsers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
         setNotice(`User "${created.username}" created.`);
       } else if (modal?.mode === "edit") {
         const data = await api("/api/users", "PATCH", {
           id: modal.user.id,
           ...profileBody(false),
         });
-        const updated: UserRow = data.user;
+        const updated = data.user as Record<string, unknown>;
         setUsers((prev) =>
           prev
-            .map((u) => (u.id === updated.id ? { ...updated, appCount: u.appCount } : u))
+            .map((u) => (u.id === updated.id ? replaceRow(updated, u) : u))
             .sort((a, b) => a.name.localeCompare(b.name))
         );
-        setNotice(`User "${updated.username}" updated.`);
+        setNotice(`User "${String(updated.username)}" updated.`);
       }
       setModal(null);
     } catch (err) {
@@ -249,9 +316,29 @@ export function UsersManager({
         id: user.id,
         isActive: !user.isActive,
       });
-      const updated: UserRow = data.user;
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...updated, appCount: u.appCount } : u)));
-      setNotice(`User "${updated.username}" ${updated.isActive ? "activated" : "deactivated"}.`);
+      const updated = data.user as Record<string, unknown>;
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? replaceRow(updated, u) : u)));
+      setNotice(`User "${String(updated.username)}" ${updated.isActive ? "activated" : "deactivated"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleLock(user: UserRow) {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api("/api/users", "PATCH", {
+        id: user.id,
+        profileLocked: !user.profileLocked,
+      });
+      const updated = data.user as Record<string, unknown>;
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? replaceRow(updated, u) : u)));
+      setNotice(
+        `Profile editing ${updated.profileLocked ? "locked" : "unlocked"} for "${String(updated.username)}".`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -271,6 +358,51 @@ export function UsersManager({
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function togglePolicyRole(value: string) {
+    const next = policy.includes(value)
+      ? policy.filter((r) => r !== value)
+      : [...policy, value];
+    setPolicyBusy(true);
+    setError(null);
+    try {
+      const data = await api("/api/profile-policy", "PATCH", { locked: next });
+      setPolicy(data.locked ?? next);
+      setNotice("Profile lock policy updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setPolicyBusy(false);
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportBusy(true);
+    setImportResult(null);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/users/import", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      setImportResult(data as ImportResult);
+
+      // Refresh the user list so newly imported users appear immediately.
+      const listRes = await fetch("/api/users", { cache: "no-store" });
+      if (listRes.ok) {
+        const list = await listRes.json();
+        if (Array.isArray(list.users)) setUsers(list.users.map((u: unknown) => { const r = u as Record<string, unknown>; return rowFromUser(r, Number(r.appCount ?? 0)); }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -309,6 +441,92 @@ export function UsersManager({
         </div>
       )}
 
+      {/* Bulk import + profile lock policy */}
+      <div className="iipe-grid iipe-grid-2" style={{ marginBottom: 18 }}>
+        <div className="iipe-card" style={{ marginBottom: 0 }}>
+          <h3 style={{ marginTop: 0 }}>Bulk import users (CSV)</h3>
+          <p className="iipe-muted" style={{ marginTop: 0 }}>
+            Upload students, scholars or any primary role in one go. Download the
+            template, fill it in, and upload — rows that fail validation are
+            reported without blocking the rest.
+          </p>
+          <div className="iipe-row" style={{ gap: 8 }}>
+            <a className="iipe-btn secondary" href="/api/users/csv-template">
+              Download template
+            </a>
+            <label
+              className="iipe-btn"
+              style={{ cursor: "pointer", margin: 0 }}
+            >
+              {importBusy ? "Importing…" : "Choose CSV file"}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                disabled={importBusy}
+                onChange={(e) => void handleImportFile(e)}
+              />
+            </label>
+          </div>
+          {importResult && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                className={`iipe-alert ${importResult.failed === 0 ? "success" : ""}`}
+                style={{ marginBottom: 8 }}
+              >
+                {importResult.created} user(s) created, {importResult.failed} row(s)
+                failed.
+              </div>
+              {importResult.errors.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: "0.85rem" }}>
+                  {importResult.errors.map((err, i) => (
+                    <li key={i} style={{ marginBottom: 4 }}>
+                      Line {err.row} <code>{err.username}</code>: {err.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="iipe-card" style={{ marginBottom: 0 }}>
+          <h3 style={{ marginTop: 0 }}>Profile edit policy</h3>
+          <p className="iipe-muted" style={{ marginTop: 0 }}>
+            Lock profile editing for whole primary roles (users of a locked role
+            cannot change their own name/email/avatar in My Account). Individual
+            users can also be locked from the table below.
+          </p>
+          {PRIMARY_ROLES.map((r) => (
+            <label
+              key={r.value}
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                padding: "4px 0",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={policy.includes(r.value)}
+                disabled={policyBusy}
+                onChange={() => void togglePolicyRole(r.value)}
+                style={{ width: 16, height: 16 }}
+              />
+              {r.label}
+            </label>
+          ))}
+          <div className="iipe-muted" style={{ marginTop: 8 }}>
+            {policy.length === 0
+              ? "No roles locked — everyone can edit their own profile."
+              : `Locked: ${policy.map((r) => r.replace(/_/g, " ").toLowerCase()).join(", ")}.`}
+          </div>
+        </div>
+      </div>
+
       <div className="iipe-row" style={{ marginBottom: 14 }}>
         <input
           className="iipe-input"
@@ -341,8 +559,51 @@ export function UsersManager({
             {filtered.map((u) => (
               <tr key={u.id}>
                 <td>
-                  <strong>{u.name}</strong>
-                  <div className="iipe-muted">@{u.username}</div>
+                  <div className="iipe-row" style={{ gap: 10, flexWrap: "nowrap" }}>
+                    {u.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`${ssoBaseUrl}${u.avatar}`}
+                        alt=""
+                        width={30}
+                        height={30}
+                        style={{
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: "50%",
+                          background: "var(--iipe-primary-light)",
+                          color: "var(--iipe-primary)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 700,
+                          fontSize: "0.72rem",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {initials(u.name) || "?"}
+                      </span>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <strong>
+                        {u.name}{" "}
+                        {u.profileLocked && (
+                          <span className="iipe-badge danger" title="Profile editing locked">
+                            Locked
+                          </span>
+                        )}
+                      </strong>
+                      <div className="iipe-muted">@{u.username}</div>
+                    </div>
+                  </div>
                 </td>
                 <td>{u.email ?? "—"}</td>
                 <td>
@@ -378,6 +639,15 @@ export function UsersManager({
                     </button>
                     <button className="iipe-btn secondary" type="button" onClick={() => toggleActive(u)} disabled={busy}>
                       {u.isActive ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      className="iipe-btn secondary"
+                      type="button"
+                      onClick={() => toggleLock(u)}
+                      disabled={busy}
+                      title="Lock or unlock this user's ability to edit their own profile"
+                    >
+                      {u.profileLocked ? "Unlock profile" : "Lock profile"}
                     </button>
                     <button className="iipe-btn danger" type="button" onClick={() => remove(u)} disabled={busy}>
                       Delete
