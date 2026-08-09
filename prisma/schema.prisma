@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------------------
+// IIPE Central Application Management — main_db
+// Owns: which users may access which applications (Level 1 access).
+// Knows nothing about roles/permissions inside the applications.
+// ------------------------------------------------------------------
+
+model Application {
+  id          String           @id @default(uuid())
+  clientId    String           @unique // matches the OIDC client id registered in the SSO
+  name        String
+  description String?
+  url         String
+  enabled     Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  grants      UserApplication[]
+}
+
+// A grant = "this user may open this application".
+// userId comes from the SSO user registry; username is denormalized for display.
+model UserApplication {
+  id            String      @id @default(uuid())
+  userId        String? // SSO user id (null until known — e.g. during seed)
+  username      String
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  grantedAt     DateTime    @default(now())
+
+  @@unique([userId, applicationId])
+}
