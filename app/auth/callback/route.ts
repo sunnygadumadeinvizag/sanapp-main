@@ -7,13 +7,14 @@ const CLIENT_ID = process.env.MAIN_CLIENT_ID!;
 const CLIENT_SECRET = process.env.MAIN_CLIENT_SECRET!;
 
 export async function GET(request: NextRequest) {
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
   const url = request.nextUrl;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
 
   const storedState = request.cookies.get("main_oauth_state")?.value;
   if (!code || !state || state !== storedState) {
-    return NextResponse.redirect(new URL("/?error=state_mismatch", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=state_mismatch", request.url));
   }
 
   // 1. Exchange the authorization code for tokens at the SSO token endpoint.
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL("/?error=token_failed", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=token_failed", request.url));
   }
   const tokens = await tokenRes.json();
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     headers: { authorization: `Bearer ${tokens.access_token}` },
   });
   if (!userRes.ok) {
-    return NextResponse.redirect(new URL("/?error=userinfo_failed", request.url));
+    return NextResponse.redirect(new URL(BASE_PATH + "/?error=userinfo_failed", request.url));
   }
   const user = await userRes.json();
 
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
   const safeReturn =
     returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
 
-  const res = NextResponse.redirect(new URL(safeReturn, request.url));
+  const res = NextResponse.redirect(new URL(safeReturn.startsWith(BASE_PATH) ? safeReturn : BASE_PATH + safeReturn, request.url));
   res.cookies.delete("main_return_to");
   res.cookies.set("main_session", session, {
     httpOnly: true,
