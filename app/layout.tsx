@@ -13,7 +13,7 @@ const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 async function getTheme() {
   const fallback = { mode: "system", primary: "#0b5d4f", accent: "#d9a441" } as const;
   try {
-    const res = await fetch(`${SSO_BASE_URL}/api/theme`, { cache: "no-store" });
+    const res = await fetch(`${SSO_BASE_URL}/api/theme`, { cache: "no-store", signal: AbortSignal.timeout(2000) });
     if (!res.ok) return fallback;
     const data = await res.json();
     return {
