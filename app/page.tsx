@@ -64,7 +64,12 @@ export default async function DashboardPage({
     { label: "Home", href: "/", active: true },
     { label: "My Apps", href: "/my-apps" },
     { label: "Applications", href: "/applications" },
-    ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
+    ...(isSuperAdmin
+      ? [
+          { label: "Users", href: "/users" },
+          { label: "Departments", href: "/departments" },
+        ]
+      : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
     { label: "SSO (identity)", href: SSO_BASE_URL },
   ];

@@ -2,13 +2,35 @@ import { cookies } from "next/headers";
 import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
-import { UsersManager, type UserRow } from "../components/UsersManager";
+import { UsersManager, type UserRow, type Option } from "../components/UsersManager";
 
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
 const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY!;
+
+type SsoUser = {
+  id: string;
+  username: string;
+  name: string;
+  email: string | null;
+  role: string;
+  primaryRole: string;
+  employmentType: string | null;
+  designation: string | null;
+  phone: string | null;
+  departmentId: string | null;
+  department: { id: string; name: string } | null;
+  programmeId: string | null;
+  programme: { id: string; name: string } | null;
+  courseId: string | null;
+  course: { id: string; name: string } | null;
+  guideId: string | null;
+  guide: { id: string; name: string } | null;
+  isActive: boolean;
+  createdAt: string;
+};
 
 export default async function UsersPage() {
   const store = await cookies();
@@ -20,8 +42,7 @@ export default async function UsersPage() {
   const usersRes = await fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, {
     cache: "no-store",
   });
-  const ssoUsers: Array<{ id: string; username: string; name: string; email: string; role: string; isActive: boolean; createdAt: string }> =
-    usersRes.ok ? (await usersRes.json()).users : [];
+  const ssoUsers: SsoUser[] = usersRes.ok ? (await usersRes.json()).users : [];
 
   const grants = await prisma.userApplication.findMany();
   const countByUser = new Map<string, number>();
@@ -33,12 +54,56 @@ export default async function UsersPage() {
     id: u.id,
     username: u.username,
     name: u.name,
-    email: u.email,
+    email: u.email ?? "",
     role: u.role,
+    primaryRole: u.primaryRole,
+    employmentType: u.employmentType,
+    designation: u.designation,
+    phone: u.phone,
+    departmentId: u.departmentId,
+    departmentName: u.department?.name ?? null,
+    programmeId: u.programmeId,
+    programmeName: u.programme?.name ?? null,
+    courseId: u.courseId,
+    courseName: u.course?.name ?? null,
+    guideId: u.guideId,
+    guideName: u.guide?.name ?? null,
     isActive: u.isActive,
     createdAt: u.createdAt,
     appCount: countByUser.get(u.username) ?? 0,
   }));
+
+  // Taxonomy for the add/edit modal.
+  const [deptRes, progRes, courseRes] = await Promise.all([
+    fetch(`${SSO_BASE_URL}/api/admin/departments?key=${SSO_ADMIN_KEY}`, { cache: "no-store" }),
+    fetch(`${SSO_BASE_URL}/api/admin/programmes?key=${SSO_ADMIN_KEY}`, { cache: "no-store" }),
+    fetch(`${SSO_BASE_URL}/api/admin/courses?key=${SSO_ADMIN_KEY}`, { cache: "no-store" }),
+  ]);
+
+  const departments: Option[] = deptRes.ok
+    ? ((await deptRes.json()).departments ?? []).map((d: { id: string; name: string }) => ({
+        id: d.id,
+        name: d.name,
+      }))
+    : [];
+  const programmes: Option[] = progRes.ok
+    ? ((await progRes.json()).programmes ?? []).map((p: { id: string; name: string }) => ({
+        id: p.id,
+        name: p.name,
+      }))
+    : [];
+  const courses: Option[] = courseRes.ok
+    ? ((await courseRes.json()).courses ?? []).map((c: { id: string; name: string }) => ({
+        id: c.id,
+        name: c.name,
+      }))
+    : [];
+
+  // Guides = staff teaching users.
+  const guides: Option[] = ssoUsers
+    .filter((u) => u.primaryRole === "STAFF_TEACHING")
+    .map((u) => ({ id: u.id, name: u.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const navItems = getPlatformNav({
     mainBaseUrl: MAIN_BASE_URL,
@@ -48,7 +113,12 @@ export default async function UsersPage() {
     { label: "Home", href: "/" },
     { label: "My Apps", href: "/my-apps" },
     { label: "Applications", href: "/applications" },
-    ...(isSuperAdmin ? [{ label: "Users", href: "/users", active: true }] : []),
+    ...(isSuperAdmin
+      ? [
+          { label: "Users", href: "/users", active: true },
+          { label: "Departments", href: "/departments" },
+        ]
+      : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
     { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
@@ -58,7 +128,12 @@ export default async function UsersPage() {
       header={{
         navItems,
         right: me ? (
-          <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
+          <UserMenu
+            name={me.name}
+            email={me.email}
+            role={isSuperAdmin ? "Super Admin" : "User"}
+            signOutHref="/api/logout"
+          >
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
             <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
           </UserMenu>
@@ -85,12 +160,19 @@ export default async function UsersPage() {
           <p className="iipe-page-sub">
             Add, edit, activate, deactivate or delete users. Identity lives in the SSO (
             <code>sso_db</code>); application access is managed on the{" "}
-            <a href="/">access matrix</a>.
+            <a href="/">access matrix</a>. Every user is identified by a primary role and a
+            department / section.
           </p>
 
           {usersRes.ok ? (
             <div className="iipe-card">
-              <UsersManager initialUsers={users} />
+              <UsersManager
+                initialUsers={users}
+                departments={departments}
+                programmes={programmes}
+                courses={courses}
+                guides={guides}
+              />
             </div>
           ) : (
             <div className="iipe-alert">
