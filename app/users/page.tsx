@@ -117,6 +117,7 @@ export default async function UsersPage() {
       ? [
           { label: "Users", href: "/users", active: true },
           { label: "Departments", href: "/departments" },
+          { label: "Announcements", href: "/announcements" },
         ]
       : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },

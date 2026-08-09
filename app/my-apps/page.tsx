@@ -44,7 +44,13 @@ export default async function MyAppsPage() {
     { label: "Home", href: "/" },
     { label: "My Apps", href: "/my-apps", active: true },
     { label: "Applications", href: "/applications" },
-    ...(isSuperAdmin ? [{ label: "Users", href: "/users" }] : []),
+    ...(isSuperAdmin
+      ? [
+          { label: "Users", href: "/users" },
+          { label: "Departments", href: "/departments" },
+          { label: "Announcements", href: "/announcements" },
+        ]
+      : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
     { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
