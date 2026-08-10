@@ -32,6 +32,14 @@ async function main() {
       url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004",
       openInNewTab: true,
     },
+    {
+      clientId: "iipe-app4",
+      name: "Facilities Booking",
+      description: "Independent application #4 — building and slot booking (own database app4_db, own roles)",
+      category: "Admin",
+      url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005",
+      openInNewTab: true,
+    },
   ];
 
   for (const a of applications) {
@@ -76,6 +84,11 @@ async function main() {
     { username: "kiran", clientId: "iipe-app2" },
     { username: "venkat", clientId: "iipe-app2" },
     { username: "venkat", clientId: "iipe-app3" },
+    { username: "admin", clientId: "iipe-app4" },
+    { username: "sanyasi", clientId: "iipe-app4" },
+    { username: "ramesh", clientId: "iipe-app4" },
+    { username: "geeta", clientId: "iipe-app4" },
+    { username: "lakshmi", clientId: "iipe-app4" },
   ];
 
   for (const g of grants) {
