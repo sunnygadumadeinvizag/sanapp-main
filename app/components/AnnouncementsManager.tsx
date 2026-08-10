@@ -1,4 +1,5 @@
 "use client";
+import { apiPath } from "iipe-common-ui";
 
 import { useMemo, useState } from "react";
 
@@ -63,7 +64,7 @@ export function AnnouncementsManager({
     if (method !== "GET" && method !== "HEAD") {
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(path, init);
+    const res = await fetch(apiPath(path), init);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "Request failed");
     return data;

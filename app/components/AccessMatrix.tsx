@@ -1,4 +1,5 @@
 "use client";
+import { apiPath } from "iipe-common-ui";
 
 import { useState } from "react";
 
@@ -32,7 +33,7 @@ export function AccessMatrix({
     setBusy(key);
     setError(null);
     try {
-      const res = await fetch("/api/grants", {
+      const res = await fetch(apiPath("/api/grants"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

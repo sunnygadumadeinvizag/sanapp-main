@@ -1,4 +1,5 @@
 "use client";
+import { apiPath } from "iipe-common-ui";
 
 import { useEffect, useState } from "react";
 
@@ -26,7 +27,7 @@ export function ThemeManager() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/theme")
+    fetch(apiPath("/api/theme"))
       .then((r) => (r.ok ? r.json() : null))
       .then((t: ThemeConfig | null) => {
         if (!t) return;
@@ -52,7 +53,7 @@ export function ThemeManager() {
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/theme", {
+      const res = await fetch(apiPath("/api/theme"), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ mode, primary, accent }),

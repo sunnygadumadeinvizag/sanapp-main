@@ -1,4 +1,5 @@
 "use client";
+import { apiPath } from "iipe-common-ui";
 
 import { useMemo, useState } from "react";
 
@@ -229,7 +230,7 @@ export function UsersManager({
     if (method !== "GET" && method !== "HEAD") {
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(path, init);
+    const res = await fetch(apiPath(path), init);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "Request failed");
     return data;
@@ -469,13 +470,13 @@ export function UsersManager({
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/users/import", { method: "POST", body: form });
+      const res = await fetch(apiPath("/api/users/import"), { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Import failed");
       setImportResult(data as ImportResult);
 
       // Refresh the user list so newly imported users appear immediately.
-      const listRes = await fetch("/api/users", { cache: "no-store" });
+      const listRes = await fetch(apiPath("/api/users"), { cache: "no-store" });
       if (listRes.ok) {
         const list = await listRes.json();
         if (Array.isArray(list.users))
