@@ -13,7 +13,7 @@ async function main() {
       name: "Academic ERP",
       description: "Independent application #1 — own database (app1_db), own roles",
       category: "Academic",
-      url: "http://localhost:3002",
+      url: process.env.APP1_PUBLIC_URL ?? "http://localhost:3002",
       openInNewTab: true,
     },
     {
@@ -21,7 +21,7 @@ async function main() {
       name: "Leave Management",
       description: "Independent application #2 — own database (app2_db), own roles",
       category: "ESTB",
-      url: "http://localhost:3003",
+      url: process.env.APP2_PUBLIC_URL ?? "http://localhost:3003",
       openInNewTab: true,
     },
     {
@@ -29,7 +29,7 @@ async function main() {
       name: "PhD ERP",
       description: "Independent application #3 — own database (app3_db), own roles",
       category: "Academic",
-      url: "http://localhost:3004",
+      url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004",
       openInNewTab: true,
     },
   ];
