@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { UsersManager, type UserRow, type Option } from "../components/UsersManager";
@@ -186,7 +186,7 @@ export default async function UsersPage() {
           <p className="iipe-page-sub">
             Add, edit, activate, deactivate or delete users. Identity lives in the SSO (
             <code>sso_db</code>); application access is managed on the{" "}
-            <a href="/">access matrix</a>. Every user is identified by a primary role and a
+            <a href={apiPath("/")}>access matrix</a>. Every user is identified by a primary role and a
             department / section.
           </p>
 

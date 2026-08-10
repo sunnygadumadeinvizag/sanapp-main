@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { AccessMatrix, type MatrixApp, type MatrixGrant, type MatrixUser } from "./components/AccessMatrix";
@@ -125,7 +125,7 @@ export default async function DashboardPage({
             {params.user && (
               <div className="iipe-alert" style={{ marginBottom: 12 }}>
                 Showing app access for <strong>{params.user}</strong> — manage users on the{" "}
-                <a href="/users">Users</a> page.
+                <a href={apiPath("/users")}>Users</a> page.
               </div>
             )}
             {ssoUsers.length === 0 ? (
