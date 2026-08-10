@@ -30,7 +30,7 @@ export async function proxy(request: NextRequest) {
   const valid = session ? await verifyMainSession(session) : null;
   if (!valid) {
     const state = crypto.randomUUID().replaceAll("-", "");
-    const authorizeUrl = new URL("/authorize", process.env.SSO_BASE_URL);
+    const authorizeUrl = new URL(process.env.SSO_BASE_URL + "/authorize");
     authorizeUrl.searchParams.set("client_id", process.env.MAIN_CLIENT_ID!);
     authorizeUrl.searchParams.set("redirect_uri", `${process.env.MAIN_BASE_URL}/auth/callback`);
     authorizeUrl.searchParams.set("response_type", "code");

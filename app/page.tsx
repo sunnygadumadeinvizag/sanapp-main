@@ -22,15 +22,7 @@ export default async function DashboardPage({
   const me = await verifyMainSession(session);
   // The proxy does not run for the exact basePath root (/main), so guard it here.
   if (!me) {
-    const state = crypto.randomUUID().replaceAll("-", "");
-    const authorizeUrl = new URL(SSO_BASE_URL + "/authorize");
-    authorizeUrl.searchParams.set("client_id", process.env.MAIN_CLIENT_ID!);
-    authorizeUrl.searchParams.set("redirect_uri", `${process.env.MAIN_BASE_URL}/auth/callback`);
-    authorizeUrl.searchParams.set("response_type", "code");
-    authorizeUrl.searchParams.set("state", state);
-    store.set("main_oauth_state", state, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 300 });
-    store.set("main_return_to", "/", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 600 });
-    redirect(authorizeUrl.toString());
+    redirect(process.env.MAIN_BASE_URL! + "/api/start-oauth");
   }
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
