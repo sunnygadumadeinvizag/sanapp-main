@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (!isLocalPath(returnTo)) returnTo = "/";
 
   const target = new URL(process.env.MAIN_BASE_URL! + returnTo);
-  const ssoLogout = new URL("/logout", process.env.SSO_BASE_URL!);
+  const ssoLogout = new URL(process.env.SSO_BASE_URL! + "/logout");
   ssoLogout.searchParams.set("post_logout_redirect_uri", target.toString());
 
   const res = NextResponse.redirect(ssoLogout, 303);

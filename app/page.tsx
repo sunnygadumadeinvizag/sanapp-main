@@ -23,7 +23,7 @@ export default async function DashboardPage({
   // The proxy does not run for the exact basePath root (/main), so guard it here.
   if (!me) {
     const state = crypto.randomUUID().replaceAll("-", "");
-    const authorizeUrl = new URL("/authorize", SSO_BASE_URL);
+    const authorizeUrl = new URL(SSO_BASE_URL + "/authorize");
     authorizeUrl.searchParams.set("client_id", process.env.MAIN_CLIENT_ID!);
     authorizeUrl.searchParams.set("redirect_uri", `${process.env.MAIN_BASE_URL}/auth/callback`);
     authorizeUrl.searchParams.set("response_type", "code");
