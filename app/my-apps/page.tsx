@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { MyAppsView, type MyAppEntry } from "../components/MyAppsView";
@@ -40,25 +41,13 @@ export default async function MyAppsPage() {
     ssoBaseUrl: SSO_BASE_URL,
     active: "my-apps",
   });
-  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
-    { label: "Home", href: "/" },
-    { label: "My Apps", href: "/my-apps", active: true },
-    { label: "Applications", href: "/applications" },
-    ...(isSuperAdmin
-      ? [
-          { label: "Users", href: "/users" },
-          { label: "Departments", href: "/departments" },
-          { label: "Announcements", href: "/announcements" },
-          { label: "Theme & Branding", href: "/theme" },
-        ]
-      : []),
-    { label: "My Account", href: `${SSO_BASE_URL}/account` },
-  ];
+  const sidebarItems = userNavItems("my-apps", SSO_BASE_URL);
 
   return (
     <PageShell
       header={{
         navItems,
+        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
         right: me ? (
           <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
@@ -66,12 +55,7 @@ export default async function MyAppsPage() {
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>
-                <a href={apiPath("/")}>App Matrix</a>
-                <a href={apiPath("/applications")}>Applications</a>
-                <a href={apiPath("/users")}>Users</a>
-                <a href={apiPath("/departments")}>Departments</a>
-                <a href={apiPath("/announcements")}>Announcements</a>
-                <a href={apiPath("/theme")}>Theme &amp; Branding</a>
+                <a href={apiPath("/admin-console")}>Admin Console</a>
               </>
             )}
           </UserMenu>

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { ApplicationsManager, type ManagedApp, type SsoClient } from "../components/ApplicationsManager";
@@ -47,25 +48,13 @@ export default async function ApplicationsPage() {
     ssoBaseUrl: SSO_BASE_URL,
     active: "applications",
   });
-  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
-    { label: "Home", href: "/" },
-    { label: "My Apps", href: "/my-apps" },
-    { label: "Applications", href: "/applications", active: true },
-    ...(isSuperAdmin
-      ? [
-          { label: "Users", href: "/users" },
-          { label: "Departments", href: "/departments" },
-          { label: "Announcements", href: "/announcements" },
-          { label: "Theme & Branding", href: "/theme" },
-        ]
-      : []),
-    { label: "My Account", href: `${SSO_BASE_URL}/account` },
-  ];
+  const sidebarItems = isSuperAdmin ? adminNavItems("applications") : userNavItems("applications", SSO_BASE_URL);
 
   return (
     <PageShell
       header={{
         navItems,
+        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
         right: me ? (
           <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
@@ -73,12 +62,7 @@ export default async function ApplicationsPage() {
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>
-                <a href={apiPath("/")}>App Matrix</a>
-                <a href={apiPath("/applications")}>Applications</a>
-                <a href={apiPath("/users")}>Users</a>
-                <a href={apiPath("/departments")}>Departments</a>
-                <a href={apiPath("/announcements")}>Announcements</a>
-                <a href={apiPath("/theme")}>Theme &amp; Branding</a>
+                <a href={apiPath("/admin-console")}>Admin Console</a>
               </>
             )}
           </UserMenu>
@@ -87,6 +71,7 @@ export default async function ApplicationsPage() {
       sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
+      {isSuperAdmin && <Breadcrumb items={adminCrumb("Applications")} />}
       <h1 className="iipe-page-title">Applications</h1>
       <p className="iipe-page-sub">
         Registered applications. Each one is an independent Next.js project with its own database,

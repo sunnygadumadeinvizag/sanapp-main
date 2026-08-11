@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
 import { verifyMainSession } from "@/lib/session";
 import { ThemeManager } from "../components/ThemeManager";
 
@@ -18,25 +19,13 @@ export default async function ThemePage() {
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });
-  const sidebarItems: { label: string; href: string; active?: boolean }[] = [
-    { label: "Home", href: "/" },
-    { label: "My Apps", href: "/my-apps" },
-    { label: "Applications", href: "/applications" },
-    ...(isSuperAdmin
-      ? [
-          { label: "Users", href: "/users" },
-          { label: "Departments", href: "/departments" },
-          { label: "Announcements", href: "/announcements" },
-          { label: "Theme & Branding", href: "/theme", active: true },
-        ]
-      : []),
-    { label: "My Account", href: `${SSO_BASE_URL}/account` },
-  ];
+  const sidebarItems = isSuperAdmin ? adminNavItems("theme") : userNavItems("home", SSO_BASE_URL);
 
   return (
     <PageShell
       header={{
         navItems,
+        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
         right: me ? (
           <UserMenu
             name={me.name}
@@ -49,12 +38,7 @@ export default async function ThemePage() {
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>
-                <a href={apiPath("/")}>App Matrix</a>
-                <a href={apiPath("/applications")}>Applications</a>
-                <a href={apiPath("/users")}>Users</a>
-                <a href={apiPath("/departments")}>Departments</a>
-                <a href={apiPath("/announcements")}>Announcements</a>
-                <a href={apiPath("/theme")}>Theme &amp; Branding</a>
+                <a href={apiPath("/admin-console")}>Admin Console</a>
               </>
             )}
           </UserMenu>
@@ -63,6 +47,7 @@ export default async function ThemePage() {
       sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
+      {isSuperAdmin && <Breadcrumb items={adminCrumb("Theme & Branding")} />}
       <h1 className="iipe-page-title">Theme &amp; Branding</h1>
 
       {!isSuperAdmin ? (
