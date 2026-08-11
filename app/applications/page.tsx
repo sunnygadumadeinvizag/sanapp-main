@@ -1,15 +1,13 @@
 import { cookies } from "next/headers";
-import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
-import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { userNavItems } from "../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
-import { ApplicationsManager, type ManagedApp, type SsoClient } from "../components/ApplicationsManager";
 
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
-const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY!;
 
 export default async function ApplicationsPage() {
   const store = await cookies();
@@ -19,36 +17,14 @@ export default async function ApplicationsPage() {
 
   const applications = await prisma.application.findMany({
     orderBy: [{ category: "asc" }, { name: "asc" }],
-    include: { _count: { select: { grants: true } } },
   });
-
-  // Registered OIDC clients from the SSO (used when adding/editing an app).
-  const clientsRes = await fetch(`${SSO_BASE_URL}/api/admin/clients`, {
-    headers: { "x-admin-key": SSO_ADMIN_KEY },
-    cache: "no-store",
-  });
-  const clientsData = await clientsRes.json().catch(() => ({}));
-  const ssoClients: SsoClient[] =
-    clientsRes.ok && Array.isArray(clientsData.clients) ? clientsData.clients : [];
-
-  const managedApps: ManagedApp[] = applications.map((a) => ({
-    id: a.id,
-    clientId: a.clientId,
-    name: a.name,
-    description: a.description,
-    url: a.url,
-    category: a.category,
-    enabled: a.enabled,
-    openInNewTab: a.openInNewTab,
-    _count: a._count,
-  }));
 
   const navItems = getPlatformNav({
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
     active: "applications",
   });
-  const sidebarItems = isSuperAdmin ? adminNavItems("applications") : userNavItems("applications", SSO_BASE_URL);
+  const sidebarItems = userNavItems("applications", SSO_BASE_URL);
 
   return (
     <PageShell
@@ -62,7 +38,7 @@ export default async function ApplicationsPage() {
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>
-                <a href={apiPath("/admin-console")}>Admin Console</a>
+                <a href={`${MAIN_BASE_URL}/admin-console`}>Admin Console</a>
               </>
             )}
           </UserMenu>
@@ -71,62 +47,55 @@ export default async function ApplicationsPage() {
       sidebarItems={sidebarItems}
     >
       <SessionGuard channel="iipe-main-session" />
-      {isSuperAdmin && <Breadcrumb items={adminCrumb("Applications")} />}
       <h1 className="iipe-page-title">Applications</h1>
       <p className="iipe-page-sub">
-        Registered applications. Each one is an independent Next.js project with its own database,
-        roles and business logic.
+        Every application on the IIPE intranet is an independent Next.js project with its own
+        database, roles and business logic. Access is granted centrally by the Super Admin.
       </p>
 
-      {isSuperAdmin ? (
-        <div className="iipe-card">
-          <ApplicationsManager initialApps={managedApps} ssoClients={ssoClients} />
-        </div>
-      ) : (
-        <div className="iipe-card">
-          <div className="iipe-table-scroll">
-            <table className="iipe-table">
-              <thead>
-                <tr>
-                  <th>Application</th>
-                  <th>Category</th>
-                  <th>OIDC client</th>
-                  <th>Status</th>
-                  <th>URL</th>
+      <div className="iipe-card">
+        <div className="iipe-table-scroll">
+          <table className="iipe-table">
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>Category</th>
+                <th>OIDC client</th>
+                <th>Status</th>
+                <th>URL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {applications.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <strong>{a.name}</strong>
+                    {a.description && <div className="iipe-muted">{a.description}</div>}
+                  </td>
+                  <td>
+                    <span className="iipe-badge">{a.category || "General"}</span>
+                  </td>
+                  <td>
+                    <code>{a.clientId}</code>
+                  </td>
+                  <td>
+                    {a.enabled ? (
+                      <span className="iipe-badge">Enabled</span>
+                    ) : (
+                      <span className="iipe-badge danger">Disabled</span>
+                    )}
+                  </td>
+                  <td>
+                    <a href={a.url} target="_blank" rel="noreferrer">
+                      {a.url}
+                    </a>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {applications.map((a) => (
-                  <tr key={a.id}>
-                    <td>
-                      <strong>{a.name}</strong>
-                      {a.description && <div className="iipe-muted">{a.description}</div>}
-                    </td>
-                    <td>
-                      <span className="iipe-badge">{a.category || "General"}</span>
-                    </td>
-                    <td>
-                      <code>{a.clientId}</code>
-                    </td>
-                    <td>
-                      {a.enabled ? (
-                        <span className="iipe-badge">Enabled</span>
-                      ) : (
-                        <span className="iipe-badge danger">Disabled</span>
-                      )}
-                    </td>
-                    <td>
-                      <a href={a.url} target="_blank" rel="noreferrer">
-                        {a.url}
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </PageShell>
   );
 }

@@ -18,37 +18,37 @@ const CONSOLE_SECTIONS: {
   {
     title: "App Matrix",
     desc: "Grant or revoke applications for each user — the central Level 1 access matrix.",
-    href: "/",
+    href: "/admin-console/app-matrix",
     icon: "▦",
   },
   {
     title: "Applications",
     desc: "Register applications, set their URL, OIDC client, category, status and launch behaviour.",
-    href: "/applications",
+    href: "/admin-console/applications",
     icon: "⬚",
   },
   {
     title: "Users",
     desc: "Add, edit, activate, deactivate or delete users, lock profiles and import via CSV.",
-    href: "/users",
+    href: "/admin-console/users",
     icon: "👥",
   },
   {
     title: "Departments",
     desc: "Manage departments / sections and their Heads (HOD).",
-    href: "/departments",
+    href: "/admin-console/departments",
     icon: "🏛",
   },
   {
     title: "Announcements",
     desc: "Post updates and alerts shown on the login page and across the intranet.",
-    href: "/announcements",
+    href: "/admin-console/announcements",
     icon: "📢",
   },
   {
     title: "Theme & Branding",
     desc: "Choose the platform mode (light / dark / system) and brand colours for every app.",
-    href: "/theme",
+    href: "/admin-console/theme",
     icon: "🎨",
   },
 ];

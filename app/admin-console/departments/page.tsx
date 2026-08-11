@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
-import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
+import { adminCrumb, adminNavItems, userNavItems } from "../../components/adminNav";
 import { verifyMainSession } from "@/lib/session";
 import {
   DepartmentsManager,
   type DepartmentRow,
   type HodOption,
-} from "../components/DepartmentsManager";
+} from "../../components/DepartmentsManager";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +92,7 @@ export default async function DepartmentsPage() {
           <p style={{ marginTop: 0 }}>
             Department management is restricted to the Super Admin.
           </p>
-          <a className="iipe-btn secondary" href="/">
+          <a className="iipe-btn secondary" href="/admin-console">
             ← Back to dashboard
           </a>
         </div>

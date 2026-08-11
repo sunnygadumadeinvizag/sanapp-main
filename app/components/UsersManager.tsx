@@ -721,7 +721,7 @@ export function UsersManager({
                   )}
                 </td>
                 <td style={{ textAlign: "center" }}>
-                  <a href={`/?user=${encodeURIComponent(u.username)}`} title="Manage app access">
+                  <a href={`/admin-console/app-matrix?user=${encodeURIComponent(u.username)}`} title="Manage app access">
                     {u.appCount}
                   </a>
                 </td>

@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
-import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
+import { adminCrumb, adminNavItems, userNavItems } from "../../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
-import { UsersManager, type UserRow, type Option } from "../components/UsersManager";
+import { UsersManager, type UserRow, type Option } from "../../components/UsersManager";
 
 export const dynamic = "force-dynamic";
 
@@ -172,7 +172,7 @@ export default async function UsersPage() {
             User management is restricted to the Super Admin. If you manage application access,
             ask the Super Admin to promote your account.
           </p>
-          <a className="iipe-btn secondary" href="/">
+          <a className="iipe-btn secondary" href="/admin-console">
             ← Back to dashboard
           </a>
         </div>
@@ -181,7 +181,7 @@ export default async function UsersPage() {
           <p className="iipe-page-sub">
             Add, edit, activate, deactivate or delete users. Identity lives in the SSO (
             <code>sso_db</code>); application access is managed on the{" "}
-            <a href={apiPath("/")}>access matrix</a>. Every user is identified by a primary role and a
+            <a href={apiPath("/admin-console/app-matrix")}>access matrix</a>. Every user is identified by a primary role and a
             department / section.
           </p>
 

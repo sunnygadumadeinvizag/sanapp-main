@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
-import { adminCrumb, adminNavItems, userNavItems } from "../components/adminNav";
+import { adminCrumb, adminNavItems, userNavItems } from "../../components/adminNav";
 import { verifyMainSession } from "@/lib/session";
-import { ThemeManager } from "../components/ThemeManager";
+import { ThemeManager } from "../../components/ThemeManager";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +56,7 @@ export default async function ThemePage() {
           <p style={{ marginTop: 0 }}>
             Changing the platform theme is restricted to the Super Admin.
           </p>
-          <a className="iipe-btn secondary" href="/">
+          <a className="iipe-btn secondary" href="/admin-console">
             ← Back to dashboard
           </a>
         </div>
