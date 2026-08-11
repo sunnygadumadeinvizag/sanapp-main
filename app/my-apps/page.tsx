@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { MyAppsView, type MyAppEntry } from "../components/MyAppsView";
@@ -53,7 +53,6 @@ export default async function MyAppsPage() {
         ]
       : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
-    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -64,6 +63,17 @@ export default async function MyAppsPage() {
           <UserMenu name={me.name} email={me.email} role={isSuperAdmin ? "Super Admin" : "User"} signOutHref="/api/logout">
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
             <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
+            {isSuperAdmin && (
+              <>
+                <div className="iipe-dropdown-section">Admin Console</div>
+                <a href={apiPath("/")}>App Matrix</a>
+                <a href={apiPath("/applications")}>Applications</a>
+                <a href={apiPath("/users")}>Users</a>
+                <a href={apiPath("/departments")}>Departments</a>
+                <a href={apiPath("/announcements")}>Announcements</a>
+                <a href={apiPath("/theme")}>Theme &amp; Branding</a>
+              </>
+            )}
           </UserMenu>
         ) : undefined,
       }}

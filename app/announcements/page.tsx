@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
 import { verifyMainSession } from "@/lib/session";
 import {
   AnnouncementsManager,
@@ -57,7 +57,6 @@ export default async function AnnouncementsPage() {
         ]
       : []),
     { label: "My Account", href: `${SSO_BASE_URL}/account` },
-    { label: "SSO (identity)", href: SSO_BASE_URL },
   ];
 
   return (
@@ -73,6 +72,17 @@ export default async function AnnouncementsPage() {
           >
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
             <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
+            {isSuperAdmin && (
+              <>
+                <div className="iipe-dropdown-section">Admin Console</div>
+                <a href={apiPath("/")}>App Matrix</a>
+                <a href={apiPath("/applications")}>Applications</a>
+                <a href={apiPath("/users")}>Users</a>
+                <a href={apiPath("/departments")}>Departments</a>
+                <a href={apiPath("/announcements")}>Announcements</a>
+                <a href={apiPath("/theme")}>Theme &amp; Branding</a>
+              </>
+            )}
           </UserMenu>
         ) : undefined,
       }}
