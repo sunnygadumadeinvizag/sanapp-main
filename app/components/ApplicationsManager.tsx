@@ -327,7 +327,7 @@ export function ApplicationsManager({
                 className="iipe-input"
                 type="url"
                 required
-                placeholder="https://intranet.iipe.ac.in/app4"
+                placeholder="https://intranet.iipe.ac.in/facilities"
                 value={draft.url}
                 onChange={(e) => setDraft({ ...draft, url: e.target.value })}
               />
