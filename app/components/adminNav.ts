@@ -23,7 +23,7 @@ export function userNavItems(
  * Every admin function lives under /admin-console/<function>.
  */
 export function adminNavItems(
-  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme"
+  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email"
 ): NavItem[] {
   return [
     { label: "Admin Console", href: "/admin-console", heading: true, active: active === "console" },
@@ -33,6 +33,7 @@ export function adminNavItems(
     { label: "Departments", href: "/admin-console/departments", active: active === "departments" },
     { label: "Announcements", href: "/admin-console/announcements", active: active === "announcements" },
     { label: "Theme & Branding", href: "/admin-console/theme", active: active === "theme" },
+    { label: "Email & SMTP", href: "/admin-console/email", active: active === "email" },
   ];
 }
 

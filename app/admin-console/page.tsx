@@ -51,6 +51,12 @@ const CONSOLE_SECTIONS: {
     href: "/admin-console/theme",
     icon: "🎨",
   },
+  {
+    title: "Email & SMTP",
+    desc: "Configure the SMTP server and From address used to send OTP and notification emails.",
+    href: "/admin-console/email",
+    icon: "✉️",
+  },
 ];
 
 export default async function AdminConsolePage() {
