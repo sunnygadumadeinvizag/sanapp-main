@@ -8,7 +8,7 @@ datasource db {
 }
 
 // ------------------------------------------------------------------
-// IIPE Central Application Management — main_db
+// IIPE Central Application Management — sanapp_main_db
 // Owns: which users may access which applications (Level 1 access).
 // Knows nothing about roles/permissions inside the applications.
 // ------------------------------------------------------------------

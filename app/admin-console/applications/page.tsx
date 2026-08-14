@@ -70,7 +70,7 @@ export default async function AdminApplicationsPage() {
       }}
       sidebarItems={adminNavItems("applications")}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <Breadcrumb items={adminCrumb("Applications")} />
       <h1 className="iipe-page-title">Applications</h1>
       <p className="iipe-page-sub">

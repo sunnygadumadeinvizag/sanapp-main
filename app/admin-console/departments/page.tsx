@@ -83,7 +83,7 @@ export default async function DepartmentsPage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       {isSuperAdmin && <Breadcrumb items={adminCrumb("Departments")} />}
       <h1 className="iipe-page-title">Departments &amp; Sections</h1>
 
@@ -102,7 +102,7 @@ export default async function DepartmentsPage() {
           <p className="iipe-page-sub">
             Every user belongs to a department / section, and each department may have a
             Head of Department. Departments live in the SSO identity registry (
-            <code>sso_db</code>).
+            <code>sanapp_sso_db</code>).
           </p>
 
           {deptRes.ok ? (

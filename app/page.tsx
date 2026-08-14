@@ -25,7 +25,7 @@ export default async function DashboardPage({
   }
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
-  // Applications + grants come from main_db.
+  // Applications + grants come from sanapp_main_db.
   const applications = await prisma.application.findMany({ orderBy: { name: "asc" } });
   const grants = await prisma.userApplication.findMany({});
 
@@ -66,7 +66,7 @@ export default async function DashboardPage({
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <h1 className="iipe-page-title">Welcome, {me.name}</h1>
       <p className="iipe-page-sub">
         Your applications are assigned by the Super Admin. Each application manages its own

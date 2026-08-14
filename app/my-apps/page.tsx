@@ -69,7 +69,7 @@ export default async function MyAppsPage({
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <h1 className="iipe-page-title">My applications</h1>
       <p className="iipe-page-sub">
         Your applications, grouped by category. Search, switch between cards and list, and click

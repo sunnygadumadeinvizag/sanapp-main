@@ -36,7 +36,7 @@ export async function GET() {
   const data = await res.json().catch(() => ({}));
   const users: Array<Record<string, unknown>> = res.ok && Array.isArray(data.users) ? data.users : [];
 
-  // Count application grants per username from main_db.
+  // Count application grants per username from sanapp_main_db.
   const grants = await prisma.userApplication.findMany();
   const countByUser = new Map<string, number>();
   for (const g of grants) {

@@ -47,7 +47,7 @@ export default async function EmailSettingsPage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       {isSuperAdmin && <Breadcrumb items={adminCrumb("Email & SMTP")} />}
       <h1 className="iipe-page-title">Email &amp; SMTP</h1>
 

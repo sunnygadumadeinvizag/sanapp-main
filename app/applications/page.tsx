@@ -47,7 +47,7 @@ export default async function ApplicationsPage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <h1 className="iipe-page-title">Applications</h1>
       <p className="iipe-page-sub">
         Every application on the IIPE intranet is an independent Next.js project with its own

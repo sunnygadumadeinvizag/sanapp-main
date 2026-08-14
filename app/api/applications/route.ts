@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
   if (clientIds.size > 0 && !clientIds.has(body.clientId)) {
     return NextResponse.json(
       {
-        error: `OIDC client "${body.clientId}" is not registered in the SSO. Register it in iipe-sso first (seed or the OidcClient table).`,
+        error: `OIDC client "${body.clientId}" is not registered in the SSO. Register it in sanapp-sso first (seed or the OidcClient table).`,
       },
       { status: 400 }
     );
@@ -171,7 +171,7 @@ export async function PATCH(request: NextRequest) {
     if (clientIds.size > 0 && !clientIds.has(body.clientId)) {
       return NextResponse.json(
         {
-          error: `OIDC client "${body.clientId}" is not registered in the SSO. Register it in iipe-sso first.`,
+          error: `OIDC client "${body.clientId}" is not registered in the SSO. Register it in sanapp-sso first.`,
         },
         { status: 400 }
       );

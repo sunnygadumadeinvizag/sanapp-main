@@ -5,45 +5,45 @@ const SSO_BASE_URL = process.env.SSO_BASE_URL ?? "http://localhost:3000";
 const SSO_ADMIN_KEY = process.env.SSO_ADMIN_KEY ?? "";
 
 async function main() {
-  console.log("Seeding main_db …");
+  console.log("Seeding sanapp_main_db …");
 
   const applications = [
     {
-      clientId: "iipe-app1",
+      clientId: "sanapp-app1",
       name: "Academic ERP",
-      description: "Independent application #1 — own database (app1_db), own roles",
+      description: "Independent application #1 — own database (sanapp_app1_db), own roles",
       category: "Academic",
       url: process.env.APP1_PUBLIC_URL ?? "http://localhost:3002",
       openInNewTab: true,
     },
     {
-      clientId: "iipe-app2",
+      clientId: "sanapp-app2",
       name: "Leave Management",
-      description: "Independent application #2 — own database (app2_db), own roles",
+      description: "Independent application #2 — own database (sanapp_app2_db), own roles",
       category: "ESTB",
       url: process.env.APP2_PUBLIC_URL ?? "http://localhost:3003",
       openInNewTab: true,
     },
     {
-      clientId: "iipe-app3",
+      clientId: "sanapp-app3",
       name: "PhD ERP",
-      description: "Independent application #3 — own database (app3_db), own roles",
+      description: "Independent application #3 — own database (sanapp_app3_db), own roles",
       category: "Academic",
       url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004",
       openInNewTab: true,
     },
     {
-      clientId: "iipe-app4",
+      clientId: "sanapp-facilities",
       name: "Facilities Booking",
-      description: "Independent application #4 — building and slot booking (own database app4_db, own roles)",
+      description: "Independent application #4 — building and slot booking (own database sanapp_facilities_db, own roles)",
       category: "Admin",
       url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005",
       openInNewTab: true,
     },
     {
-      clientId: "iipe-app5",
+      clientId: "sanapp-logrequest",
       name: "Log Request",
-      description: "Independent application #5 — request tracking (own database app5_db, own roles)",
+      description: "Independent application #5 — request tracking (own database sanapp_logrequest_db, own roles)",
       category: "IT Services",
       url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006",
       openInNewTab: false,
@@ -58,7 +58,7 @@ async function main() {
     });
   }
 
-  // Resolve usernames → SSO user ids (identity lives in sso_db, not here).
+  // Resolve usernames → SSO user ids (identity lives in sanapp_sso_db, not here).
   const userIds: Record<string, string> = {};
   try {
     const res = await fetch(`${SSO_BASE_URL}/api/admin/users`, {
@@ -78,32 +78,32 @@ async function main() {
   }
 
   const grants = [
-    { username: "sanyasi", clientId: "iipe-app1" },
-    { username: "sanyasi", clientId: "iipe-app2" },
-    { username: "sanyasi", clientId: "iipe-app3" },
-    { username: "lakshmi", clientId: "iipe-app1" },
-    { username: "admin", clientId: "iipe-app1" },
-    { username: "admin", clientId: "iipe-app3" },
-    { username: "ramesh", clientId: "iipe-app1" },
-    { username: "ramesh", clientId: "iipe-app2" },
-    { username: "ramesh", clientId: "iipe-app3" },
-    { username: "geeta", clientId: "iipe-app1" },
-    { username: "geeta", clientId: "iipe-app3" },
-    { username: "kiran", clientId: "iipe-app2" },
-    { username: "venkat", clientId: "iipe-app2" },
-    { username: "venkat", clientId: "iipe-app3" },
-    { username: "admin", clientId: "iipe-app4" },
-    { username: "sanyasi", clientId: "iipe-app4" },
-    { username: "ramesh", clientId: "iipe-app4" },
-    { username: "geeta", clientId: "iipe-app4" },
-    { username: "lakshmi", clientId: "iipe-app4" },
-    { username: "admin", clientId: "iipe-app5" },
-    { username: "sanyasi", clientId: "iipe-app5" },
-    { username: "ramesh", clientId: "iipe-app5" },
-    { username: "lakshmi", clientId: "iipe-app5" },
-    { username: "geeta", clientId: "iipe-app5" },
-    { username: "kiran", clientId: "iipe-app5" },
-    { username: "venkat", clientId: "iipe-app5" },
+    { username: "sanyasi", clientId: "sanapp-app1" },
+    { username: "sanyasi", clientId: "sanapp-app2" },
+    { username: "sanyasi", clientId: "sanapp-app3" },
+    { username: "lakshmi", clientId: "sanapp-app1" },
+    { username: "admin", clientId: "sanapp-app1" },
+    { username: "admin", clientId: "sanapp-app3" },
+    { username: "ramesh", clientId: "sanapp-app1" },
+    { username: "ramesh", clientId: "sanapp-app2" },
+    { username: "ramesh", clientId: "sanapp-app3" },
+    { username: "geeta", clientId: "sanapp-app1" },
+    { username: "geeta", clientId: "sanapp-app3" },
+    { username: "kiran", clientId: "sanapp-app2" },
+    { username: "venkat", clientId: "sanapp-app2" },
+    { username: "venkat", clientId: "sanapp-app3" },
+    { username: "admin", clientId: "sanapp-facilities" },
+    { username: "sanyasi", clientId: "sanapp-facilities" },
+    { username: "ramesh", clientId: "sanapp-facilities" },
+    { username: "geeta", clientId: "sanapp-facilities" },
+    { username: "lakshmi", clientId: "sanapp-facilities" },
+    { username: "admin", clientId: "sanapp-logrequest" },
+    { username: "sanyasi", clientId: "sanapp-logrequest" },
+    { username: "ramesh", clientId: "sanapp-logrequest" },
+    { username: "lakshmi", clientId: "sanapp-logrequest" },
+    { username: "geeta", clientId: "sanapp-logrequest" },
+    { username: "kiran", clientId: "sanapp-logrequest" },
+    { username: "venkat", clientId: "sanapp-logrequest" },
   ];
 
   for (const g of grants) {
@@ -126,7 +126,7 @@ async function main() {
     });
   }
 
-  console.log("Seeded main_db: applications, grants.");
+  console.log("Seeded sanapp_main_db: applications, grants.");
 }
 
 main()

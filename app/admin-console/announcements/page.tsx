@@ -73,7 +73,7 @@ export default async function AnnouncementsPage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       {isSuperAdmin && <Breadcrumb items={adminCrumb("Announcements")} />}
       <h1 className="iipe-page-title">Announcements</h1>
 
@@ -92,7 +92,7 @@ export default async function AnnouncementsPage() {
           <p className="iipe-page-sub">
             Post <strong>updates</strong> and <strong>alerts</strong> that appear on
             the SSO login page for everyone signing in. Announcements live in the SSO
-            identity registry (<code>sso_db</code>) and are served publicly by the
+            identity registry (<code>sanapp_sso_db</code>) and are served publicly by the
             SSO.
           </p>
 

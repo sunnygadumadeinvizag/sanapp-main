@@ -47,7 +47,7 @@ export default async function ThemePage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       {isSuperAdmin && <Breadcrumb items={adminCrumb("Theme & Branding")} />}
       <h1 className="iipe-page-title">Theme &amp; Branding</h1>
 
@@ -66,7 +66,7 @@ export default async function ThemePage() {
           <p className="iipe-page-sub">
             Choose the <strong>default mode</strong> (light, dark, or system) and the{" "}
             <strong>brand colors</strong> used by every IIPE application. The change is
-            stored centrally in the SSO (<code>sso_db</code>) and applies across the whole
+            stored centrally in the SSO (<code>sanapp_sso_db</code>) and applies across the whole
             platform; individual users can still override the mode with the header toggle.
           </p>
           <ThemeManager />

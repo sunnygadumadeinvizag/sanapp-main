@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 
 const SECRET = new TextEncoder().encode(process.env.MAIN_SESSION_SECRET!);
-const ISSUER = "iipe-main";
+const ISSUER = "sanapp-main";
 
 export type MainUser = {
   sub: string;

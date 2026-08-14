@@ -94,7 +94,7 @@ export default async function AdminConsolePage() {
       }}
       sidebarItems={adminNavItems("console")}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <Breadcrumb items={adminCrumb("Admin Console")} />
       <h1 className="iipe-page-title">Admin Console</h1>
       <p className="iipe-page-sub">

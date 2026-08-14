@@ -48,7 +48,7 @@ export default async function UsersPage() {
   const me = await verifyMainSession(session);
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
-  // Users come from the SSO user registry; grants come from main_db.
+  // Users come from the SSO user registry; grants come from sanapp_main_db.
   const [usersRes, policyRes] = await Promise.all([
     fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, {
       cache: "no-store",
@@ -164,7 +164,7 @@ export default async function UsersPage() {
       }}
       sidebarItems={sidebarItems}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       {isSuperAdmin && <Breadcrumb items={adminCrumb("Users")} />}
       <h1 className="iipe-page-title">User Management</h1>
 
@@ -183,7 +183,7 @@ export default async function UsersPage() {
         <>
           <p className="iipe-page-sub">
             Add, edit, activate, deactivate or delete users. Identity lives in the SSO (
-            <code>sso_db</code>); application access is managed on the{" "}
+            <code>sanapp_sso_db</code>); application access is managed on the{" "}
             <a href={apiPath("/admin-console/app-matrix")}>access matrix</a>. Every user is identified by a primary role and a
             department / section.
           </p>

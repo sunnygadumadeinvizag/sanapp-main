@@ -27,13 +27,13 @@ export default async function AppMatrixPage({
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
   if (!isSuperAdmin) redirect("/");
 
-  // Users come from the SSO user registry (main_db does not store users).
+  // Users come from the SSO user registry (sanapp_main_db does not store users).
   const usersRes = await fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, {
     cache: "no-store",
   });
   const ssoUsers = usersRes.ok ? (await usersRes.json()).users : [];
 
-  // Applications + grants come from main_db.
+  // Applications + grants come from sanapp_main_db.
   const applications = await prisma.application.findMany({ orderBy: { name: "asc" } });
   const grants = await prisma.userApplication.findMany({
     include: { application: true },
@@ -83,7 +83,7 @@ export default async function AppMatrixPage({
       }}
       sidebarItems={adminNavItems("matrix")}
     >
-      <SessionGuard channel="iipe-main-session" />
+      <SessionGuard channel="sanapp-main-session" />
       <Breadcrumb items={adminCrumb("App Matrix")} />
       <h1 className="iipe-page-title">Central Application Access</h1>
       <p className="iipe-page-sub">
@@ -137,8 +137,8 @@ export default async function AppMatrixPage({
         <div className="iipe-card">
           <h2>Database isolation</h2>
           <p style={{ marginTop: 0 }}>
-            Users live in <code>sso_db</code>; application metadata and grants live in{" "}
-            <code>main_db</code>; each application keeps its own database. Main never reads an
+            Users live in <code>sanapp_sso_db</code>; application metadata and grants live in{" "}
+            <code>sanapp_main_db</code>; each application keeps its own database. Main never reads an
             application&apos;s data.
           </p>
         </div>
