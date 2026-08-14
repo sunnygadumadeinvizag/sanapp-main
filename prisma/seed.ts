@@ -40,6 +40,14 @@ async function main() {
       url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005",
       openInNewTab: true,
     },
+    {
+      clientId: "iipe-app5",
+      name: "Log Request",
+      description: "Independent application #5 — request tracking (own database app5_db, own roles)",
+      category: "IT Services",
+      url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006",
+      openInNewTab: false,
+    },
   ];
 
   for (const a of applications) {
@@ -89,6 +97,13 @@ async function main() {
     { username: "ramesh", clientId: "iipe-app4" },
     { username: "geeta", clientId: "iipe-app4" },
     { username: "lakshmi", clientId: "iipe-app4" },
+    { username: "admin", clientId: "iipe-app5" },
+    { username: "sanyasi", clientId: "iipe-app5" },
+    { username: "ramesh", clientId: "iipe-app5" },
+    { username: "lakshmi", clientId: "iipe-app5" },
+    { username: "geeta", clientId: "iipe-app5" },
+    { username: "kiran", clientId: "iipe-app5" },
+    { username: "venkat", clientId: "iipe-app5" },
   ];
 
   for (const g of grants) {
