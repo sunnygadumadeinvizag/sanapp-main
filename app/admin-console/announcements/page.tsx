@@ -49,6 +49,7 @@ export default async function AnnouncementsPage() {
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,

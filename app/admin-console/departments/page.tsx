@@ -59,6 +59,7 @@ export default async function DepartmentsPage() {
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,

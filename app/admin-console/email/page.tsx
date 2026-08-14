@@ -23,6 +23,7 @@ export default async function EmailSettingsPage() {
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,

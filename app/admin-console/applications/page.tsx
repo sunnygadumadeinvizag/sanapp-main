@@ -55,6 +55,7 @@ export default async function AdminApplicationsPage() {
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,

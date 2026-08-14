@@ -138,6 +138,7 @@ export default async function UsersPage() {
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,

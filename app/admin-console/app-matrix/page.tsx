@@ -63,6 +63,7 @@ export default async function AppMatrixPage({
 
   return (
     <PageShell
+      appName="Main"
       header={{
         navItems,
         appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
