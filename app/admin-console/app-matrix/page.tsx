@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
 import { adminCrumb, adminNavItems } from "../../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
@@ -113,7 +113,7 @@ export default async function AppMatrixPage({
         )}
         {ssoUsers.length === 0 ? (
           <div className="iipe-alert">
-            Could not load the user registry from the SSO. Is iipe-sso running on port 3000?
+            Could not load the user registry from the SSO. Is sanapp-sso running on port 3000?
           </div>
         ) : (
           <AccessMatrix

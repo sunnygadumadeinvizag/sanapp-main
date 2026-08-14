@@ -1,5 +1,5 @@
 "use client";
-import { apiPath } from "iipe-common-ui";
+import { apiPath } from "sanapp-common-ui";
 
 import { useState } from "react";
 

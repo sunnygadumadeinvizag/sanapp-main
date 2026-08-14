@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
 import { adminCrumb, adminNavItems, userNavItems } from "../../components/adminNav";
 import { verifyMainSession } from "@/lib/session";
 import { ThemeManager } from "../../components/ThemeManager";

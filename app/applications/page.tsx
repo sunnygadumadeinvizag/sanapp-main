@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "iipe-common-ui";
+import { getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
 import { userNavItems } from "../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";

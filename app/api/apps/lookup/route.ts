@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Server-to-server lookup used by independent applications (consumers of
- * iipe-common-ui) to answer "which app am I?".
+ * sanapp-common-ui) to answer "which app am I?".
  *
  * One project can host several applications: the same Next.js codebase may be
  * deployed at two different base paths, each registered here as its own

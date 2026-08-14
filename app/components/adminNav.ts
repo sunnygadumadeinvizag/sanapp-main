@@ -1,4 +1,4 @@
-import type { NavItem } from "iipe-common-ui";
+import type { NavItem } from "sanapp-common-ui";
 
 /**
  * Sidebar for the "user" area of the portal (Home, My Apps, Applications,
