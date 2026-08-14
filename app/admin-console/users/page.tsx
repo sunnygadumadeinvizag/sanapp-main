@@ -36,6 +36,7 @@ type SsoUser = {
   nonInstituteEmail: string | null;
   emergencyPhone: string | null;
   isActive: boolean;
+  isTest: boolean;
   avatar: string | null;
   profileLocked: boolean;
   createdAt: string;
@@ -92,6 +93,7 @@ export default async function UsersPage() {
     nonInstituteEmail: u.nonInstituteEmail,
     emergencyPhone: u.emergencyPhone,
     isActive: u.isActive,
+    isTest: u.isTest,
     avatar: u.avatar,
     profileLocked: u.profileLocked,
     createdAt: u.createdAt,

@@ -28,6 +28,7 @@ export type UserRow = {
   guideId: string | null;
   guideName: string | null;
   isActive: boolean;
+  isTest: boolean;
   avatar: string | null;
   profileLocked: boolean;
   createdAt: string;
@@ -167,6 +168,7 @@ function rowFromUser(u: Record<string, unknown>, appCount: number): UserRow {
     guideId: u.guideId ? String(u.guideId) : null,
     guideName: guide?.name ?? null,
     isActive: Boolean(u.isActive),
+    isTest: Boolean(u.isTest),
     avatar: u.avatar ? String(u.avatar) : null,
     profileLocked: Boolean(u.profileLocked),
     createdAt: u.createdAt ? String(u.createdAt) : new Date().toISOString(),
@@ -688,6 +690,11 @@ export function UsersManager({
                     <div style={{ minWidth: 0 }}>
                       <strong>
                         {u.name}{" "}
+                        {u.isTest && (
+                          <span className="iipe-badge" title="Seed / demo account (not from the employee master list)">
+                            Test
+                          </span>
+                        )}
                         {u.profileLocked && (
                           <span className="iipe-badge danger" title="Profile editing locked">
                             Locked
