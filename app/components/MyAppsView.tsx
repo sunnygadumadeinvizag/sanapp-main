@@ -15,9 +15,46 @@ type ViewMode = "cards" | "list";
 
 const VIEW_KEY = "iipe-my-apps-view";
 
-export function MyAppsView({ initialApps }: { initialApps: MyAppEntry[] }) {
+/** Strip the trailing slash so "/logrequest" and "/logrequest/" match. */
+function normPath(p: string | null | undefined): string | null {
+  if (!p) return null;
+  const clean = p.trim().replace(/\/+$/, "") || "/";
+  return clean === "/" ? null : clean;
+}
+
+/** The path portion of an app URL ("http://intranet.iipe.ac.in/logrequest/" -> "/logrequest"). */
+function urlPath(u: string): string | null {
+  try {
+    return normPath(new URL(u).pathname);
+  } catch {
+    return normPath(u);
+  }
+}
+
+export function MyAppsView({
+  initialApps,
+  currentPath,
+}: {
+  initialApps: MyAppEntry[];
+  /** Path of the app the user came from, e.g. "/logrequest" (?from= on the link). */
+  currentPath?: string | null;
+}) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
+
+  // Which app the user is currently in. Prefer the ?from= param carried by the
+  // shared header's My Apps link; fall back to document.referrer for arrivals
+  // via the Apps menu / profile dropdown / direct navigation.
+  const [herePath, setHerePath] = useState<string | null>(() => normPath(currentPath));
+  useEffect(() => {
+    if (herePath) return;
+    try {
+      setHerePath(urlPath(document.referrer));
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Restore the user's card/list preference (per browser, across visits).
   useEffect(() => {
@@ -65,6 +102,11 @@ export function MyAppsView({ initialApps }: { initialApps: MyAppEntry[] }) {
       }))
       .sort((a, b) => a.category.localeCompare(b.category));
   }, [filtered]);
+
+  const isHere = (app: MyAppEntry) => {
+    const p = urlPath(app.url);
+    return !!p && !!herePath && p === herePath;
+  };
 
   const total = initialApps.length;
 
@@ -123,29 +165,46 @@ export function MyAppsView({ initialApps }: { initialApps: MyAppEntry[] }) {
 
             {view === "cards" ? (
               <div className="iipe-grid iipe-grid-2">
-                {apps.map((a) => (
-                  <div className="iipe-card" key={a.id} style={{ marginBottom: 0 }}>
-                    <div className="iipe-row" style={{ marginBottom: 6 }}>
-                      <h3 style={{ margin: 0 }}>{a.name}</h3>
-                      <span className="iipe-spacer" />
-                      <span className="iipe-badge">{category}</span>
-                    </div>
-                    {a.description && (
-                      <p className="iipe-muted" style={{ marginTop: 0, marginBottom: 12 }}>
-                        {a.description}
-                      </p>
-                    )}
-                    <a
-                      className="iipe-btn"
-                      href={a.url}
-                      target={a.openInNewTab ? "_blank" : "_self"}
-                      rel={a.openInNewTab ? "noreferrer" : undefined}
+                {apps.map((a) => {
+                  const here = isHere(a);
+                  return (
+                    <div
+                      className="iipe-card"
+                      key={a.id}
+                      style={{
+                        marginBottom: 0,
+                        borderColor: here ? "var(--iipe-primary)" : undefined,
+                        boxShadow: here ? "0 0 0 1px var(--iipe-primary)" : undefined,
+                      }}
                     >
-                      Open {a.name}
-                      {a.openInNewTab ? " ↗" : ""}
-                    </a>
-                  </div>
-                ))}
+                      <div className="iipe-row" style={{ marginBottom: 6 }}>
+                        <h3 style={{ margin: 0 }}>{a.name}</h3>
+                        <span className="iipe-spacer" />
+                        {here ? (
+                          <span className="iipe-badge accent" title="You are currently in this application">
+                            ● You are here
+                          </span>
+                        ) : (
+                          <span className="iipe-badge">{category}</span>
+                        )}
+                      </div>
+                      {a.description && (
+                        <p className="iipe-muted" style={{ marginTop: 0, marginBottom: 12 }}>
+                          {a.description}
+                        </p>
+                      )}
+                      <a
+                        className="iipe-btn"
+                        href={a.url}
+                        target={a.openInNewTab ? "_blank" : "_self"}
+                        rel={a.openInNewTab ? "noreferrer" : undefined}
+                      >
+                        {here ? "Current app" : `Open ${a.name}`}
+                        {a.openInNewTab ? " ↗" : ""}
+                      </a>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="iipe-card" style={{ padding: 6 }}>
@@ -160,29 +219,37 @@ export function MyAppsView({ initialApps }: { initialApps: MyAppEntry[] }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {apps.map((a) => (
-                        <tr key={a.id}>
-                          <td>
-                            <strong>{a.name}</strong>
-                            {a.description && <div className="iipe-muted">{a.description}</div>}
-                          </td>
-                          <td>
-                            <span className="iipe-badge">{category}</span>
-                          </td>
-                          <td className="iipe-muted">{a.url}</td>
-                          <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                            <a
-                              className="iipe-btn secondary"
-                              style={{ padding: "5px 12px" }}
-                              href={a.url}
-                              target={a.openInNewTab ? "_blank" : "_self"}
-                              rel={a.openInNewTab ? "noreferrer" : undefined}
-                            >
-                              Open {a.openInNewTab ? "↗" : "→"}
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
+                      {apps.map((a) => {
+                        const here = isHere(a);
+                        return (
+                          <tr key={a.id} style={here ? { background: "var(--iipe-primary-light)" } : undefined}>
+                            <td>
+                              <strong>{a.name}</strong>
+                              {here && (
+                                <span className="iipe-badge accent" style={{ marginLeft: 8 }} title="You are currently in this application">
+                                  ● You are here
+                                </span>
+                              )}
+                              {a.description && <div className="iipe-muted">{a.description}</div>}
+                            </td>
+                            <td>
+                              <span className="iipe-badge">{category}</span>
+                            </td>
+                            <td className="iipe-muted">{a.url}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                              <a
+                                className="iipe-btn secondary"
+                                style={{ padding: "5px 12px" }}
+                                href={a.url}
+                                target={a.openInNewTab ? "_blank" : "_self"}
+                                rel={a.openInNewTab ? "noreferrer" : undefined}
+                              >
+                                {here ? "Current" : `Open ${a.openInNewTab ? "↗" : "→"}`}
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

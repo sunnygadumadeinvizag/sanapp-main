@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
 
-export default async function MyAppsPage() {
+export default async function MyAppsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const sp = await searchParams;
   const store = await cookies();
   const session = store.get("main_session")?.value ?? "";
   const me = await verifyMainSession(session);
@@ -72,7 +77,7 @@ export default async function MyAppsPage() {
         each application.
       </p>
 
-      <MyAppsView initialApps={apps} />
+      <MyAppsView initialApps={apps} currentPath={sp.from ?? null} />
     </PageShell>
   );
 }
