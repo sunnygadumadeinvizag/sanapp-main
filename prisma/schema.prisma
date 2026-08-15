@@ -26,6 +26,46 @@ model Application {
   openInNewTab Boolean          @default(true)
   createdAt    DateTime         @default(now())
   grants       UserApplication[]
+  issues       TechnicalIssue[]
+}
+
+// Technical issues raised by portal users against a specific application
+// (e.g. "Login broken", "Report export fails"). Tracked centrally in the
+// intranet portal; the Super Admin works them from the Admin Console.
+model TechnicalIssue {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  // Identity from the central SSO session at raise time.
+  userId        String?
+  username      String
+  name          String
+  title         String
+  description   String
+  status        IssueStatus @default(OPEN)
+  priority      IssuePriority @default(MEDIUM)
+  // Optional resolution note / reply from the Super Admin.
+  resolution    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([applicationId, status])
+  @@index([username, createdAt])
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 // A grant = "this user may open this application".

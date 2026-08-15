@@ -57,6 +57,12 @@ const CONSOLE_SECTIONS: {
     href: "/admin-console/email",
     icon: "✉️",
   },
+  {
+    title: "Technical Issues",
+    desc: "Track and resolve technical issues raised by users against applications.",
+    href: "/admin-console/issues",
+    icon: "🛠",
+  },
 ];
 
 export default async function AdminConsolePage() {

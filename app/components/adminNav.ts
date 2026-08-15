@@ -5,13 +5,14 @@ import type { NavItem } from "sanapp-common-ui";
  * My Account) — the same for every role.
  */
 export function userNavItems(
-  active?: "home" | "my-apps" | "applications" | "account",
+  active?: "home" | "my-apps" | "applications" | "issues" | "account",
   ssoBaseUrl?: string
 ): NavItem[] {
   return [
     { label: "Home", href: "/", active: active === "home" },
     { label: "My Apps", href: "/my-apps", active: active === "my-apps" },
     { label: "Applications", href: "/applications", active: active === "applications" },
+    { label: "Technical Issues", href: "/issues", active: active === "issues" },
     { label: "My Account", href: `${ssoBaseUrl ?? "/"}/account`, active: active === "account" },
   ];
 }
@@ -23,7 +24,7 @@ export function userNavItems(
  * Every admin function lives under /admin-console/<function>.
  */
 export function adminNavItems(
-  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email"
+  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email" | "issues"
 ): NavItem[] {
   return [
     { label: "Admin Console", href: "/admin-console", heading: true, active: active === "console" },
@@ -34,6 +35,7 @@ export function adminNavItems(
     { label: "Announcements", href: "/admin-console/announcements", active: active === "announcements" },
     { label: "Theme & Branding", href: "/admin-console/theme", active: active === "theme" },
     { label: "Email & SMTP", href: "/admin-console/email", active: active === "email" },
+    { label: "Technical Issues", href: "/admin-console/issues", active: active === "issues" },
   ];
 }
 
