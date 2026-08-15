@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { appUrl } from "sanapp-common-ui";
 
 export type MyAppEntry = {
   id: string;
@@ -195,7 +196,7 @@ export function MyAppsView({
                       )}
                       <a
                         className="iipe-btn"
-                        href={a.url}
+                        href={appUrl(a.url)}
                         target={a.openInNewTab ? "_blank" : "_self"}
                         rel={a.openInNewTab ? "noreferrer" : undefined}
                       >
@@ -235,12 +236,12 @@ export function MyAppsView({
                             <td>
                               <span className="iipe-badge">{category}</span>
                             </td>
-                            <td className="iipe-muted">{a.url}</td>
+                            <td className="iipe-muted">{appUrl(a.url)}</td>
                             <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                               <a
                                 className="iipe-btn secondary"
                                 style={{ padding: "5px 12px" }}
-                                href={a.url}
+                                href={appUrl(a.url)}
                                 target={a.openInNewTab ? "_blank" : "_self"}
                                 rel={a.openInNewTab ? "noreferrer" : undefined}
                               >

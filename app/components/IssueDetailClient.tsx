@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPath } from "sanapp-common-ui";
+import { apiPath, appUrl } from "sanapp-common-ui";
 
 type Issue = {
   id: string;
@@ -88,7 +88,7 @@ export function IssueDetailClient({
         <span className="iipe-badge">{PRIORITY_LABELS[issue.priority]} priority</span>
         <span className="iipe-badge">{issue.application.name}</span>
         <span className="iipe-spacer" />
-        <a href={issue.application.url} target="_blank" rel="noreferrer" className="iipe-btn secondary">
+        <a href={appUrl(issue.application.url)} target="_blank" rel="noreferrer" className="iipe-btn secondary">
           Open {issue.application.name} →
         </a>
       </div>
