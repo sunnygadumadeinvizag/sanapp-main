@@ -5,6 +5,9 @@ import { verifyMainSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+const LOGREQUEST_BASE_URL = process.env.LOGREQUEST_BASE_URL ?? "";
+const INTERNAL_KEY = process.env.LOGREQUEST_INTERNAL_KEY ?? "";
+
 /**
  * The signed-in portal user, or null. Required for every endpoint here.
  */
@@ -15,8 +18,56 @@ async function requireUser() {
   return me;
 }
 
+/**
+ * Resolve an application name (stored on the Log Request entry) back to the
+ * registry application so the UI can show the app link.
+ */
+async function appByName(name: string | null) {
+  if (!name) return null;
+  return prisma.application.findFirst({
+    where: { name, enabled: true },
+    select: { id: true, name: true, url: true },
+  });
+}
+
+/**
+ * Map a Log Request serialized request into the issue shape the UI expects.
+ */
+async function toIssue(r: any) {
+  const app = await appByName(r.appName);
+  return {
+    id: r.id,
+    applicationId: app?.id ?? r.appName ?? "",
+    application: app ?? { id: r.appName ?? "", name: r.appName ?? "Intranet", url: "" },
+    username: r.requestedBy?.username ?? "",
+    name: r.requestedBy?.name ?? "",
+    title: r.title,
+    description: r.description,
+    status: mapStatusOut(r.status),
+    priority: r.priority,
+    resolution: r.resolution,
+    resolvedAt: r.resolvedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
+/** Log Request status → Main issue status. */
+function mapStatusOut(s: string): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" {
+  switch (s) {
+    case "IN_PROGRESS":
+    case "PENDING":
+      return "IN_PROGRESS";
+    case "RESOLVED":
+      return "RESOLVED";
+    case "CLOSED":
+      return "CLOSED";
+    default:
+      return "OPEN";
+  }
+}
+
 // GET /api/issues?scope=mine|all&status=&appId=&q=&page=&limit=
-// Users see their own raised issues; super admins can list everything.
 export async function GET(request: NextRequest) {
   const me = await requireUser();
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -33,56 +84,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const where: any = {};
-  if (scope === "mine") {
-    where.OR = [{ userId: me.sub }, { username: me.username }];
-  }
-  if (status) where.status = status;
-  if (appId) where.applicationId = appId;
-  if (q) {
-    where.OR = [
-      ...(where.OR ?? []),
-      { title: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } },
-      { name: { contains: q, mode: "insensitive" } },
-      { username: { contains: q, mode: "insensitive" } },
-    ];
+  // Resolve appId → app name so the Log Request side can filter by it.
+  let appName = "";
+  if (appId) {
+    const app = await prisma.application.findUnique({ where: { id: appId } });
+    appName = app?.name ?? "";
   }
 
-  const [rows, total] = await Promise.all([
-    prisma.technicalIssue.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-      include: { application: { select: { id: true, name: true, url: true } } },
-    }),
-    prisma.technicalIssue.count({ where }),
-  ]);
-
-  return NextResponse.json({
-    issues: rows.map((i) => ({
-      id: i.id,
-      applicationId: i.applicationId,
-      application: i.application,
-      username: i.username,
-      name: i.name,
-      title: i.title,
-      description: i.description,
-      status: i.status,
-      priority: i.priority,
-      resolution: i.resolution,
-      resolvedAt: i.resolvedAt ? i.resolvedAt.toISOString() : null,
-      createdAt: i.createdAt.toISOString(),
-      updatedAt: i.updatedAt.toISOString(),
-    })),
-    total,
-    page,
-    limit,
+  const params = new URLSearchParams({
+    scope,
+    page: String(page),
+    limit: String(limit),
   });
+  if (scope === "mine") params.set("username", me.username);
+  if (status) params.set("status", status);
+  if (appName) params.set("appName", appName);
+  if (q) params.set("q", q);
+
+  const res = await fetch(`${LOGREQUEST_BASE_URL}/api/internal/issues?${params}`, {
+    headers: { "x-internal-key": INTERNAL_KEY },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    return NextResponse.json({ error: "issues_unavailable", detail: res.status }, { status: 502 });
+  }
+  const data = await res.json();
+  const issues = await Promise.all((data.requests ?? []).map(toIssue));
+  return NextResponse.json({ issues, total: data.total ?? 0, page, limit });
 }
 
-// POST /api/issues — any signed-in portal user raises an issue against an app.
+// POST /api/issues — raise a technical issue against an application.
+// The issue becomes a Log Request under the "Intranet Issue" category, so the
+// category's POC works on it with the full request workflow.
 export async function POST(request: NextRequest) {
   const me = await requireUser();
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -108,37 +141,27 @@ export async function POST(request: NextRequest) {
   const app = await prisma.application.findUnique({ where: { id: applicationId } });
   if (!app) return NextResponse.json({ error: "app_not_found" }, { status: 404 });
 
-  const issue = await prisma.technicalIssue.create({
-    data: {
-      applicationId,
-      userId: me.sub,
+  const res = await fetch(`${LOGREQUEST_BASE_URL}/api/internal/issues`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-internal-key": INTERNAL_KEY,
+    },
+    body: JSON.stringify({
       username: me.username,
       name: me.name,
+      appName: app.name,
       title,
       description,
       priority,
-    },
-    include: { application: { select: { id: true, name: true, url: true } } },
+    }),
+    cache: "no-store",
   });
+  const data = await res.json();
+  if (!res.ok) {
+    return NextResponse.json({ error: data?.error ?? "issues_unavailable" }, { status: res.status >= 500 ? 502 : res.status });
+  }
 
-  return NextResponse.json(
-    {
-      issue: {
-        id: issue.id,
-        applicationId: issue.applicationId,
-        application: issue.application,
-        username: issue.username,
-        name: issue.name,
-        title: issue.title,
-        description: issue.description,
-        status: issue.status,
-        priority: issue.priority,
-        resolution: issue.resolution,
-        resolvedAt: issue.resolvedAt ? issue.resolvedAt.toISOString() : null,
-        createdAt: issue.createdAt.toISOString(),
-        updatedAt: issue.updatedAt.toISOString(),
-      },
-    },
-    { status: 201 }
-  );
+  const issue = await toIssue(data.request);
+  return NextResponse.json({ issue }, { status: 201 });
 }

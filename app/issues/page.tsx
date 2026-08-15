@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
+const LOGREQUEST_BASE_URL = process.env.LOGREQUEST_BASE_URL ?? "";
+const INTERNAL_KEY = process.env.LOGREQUEST_INTERNAL_KEY ?? "";
 
 export default async function IssuesPage() {
   const store = await cookies();
@@ -22,17 +24,21 @@ export default async function IssuesPage() {
     select: { id: true, name: true, url: true },
   });
 
-  const [issues, total] = await Promise.all([
-    prisma.technicalIssue.findMany({
-      where: me ? { OR: [{ userId: me.sub }, { username: me.username }] } : { id: "" },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: { application: { select: { id: true, name: true, url: true } } },
-    }),
-    prisma.technicalIssue.count({
-      where: me ? { OR: [{ userId: me.sub }, { username: me.username }] } : { id: "" },
-    }),
-  ]);
+  // Issues live in Log Request (Intranet Issue category) — single source of truth.
+  let issues: any[] = [];
+  let total = 0;
+  if (me) {
+    const params = new URLSearchParams({ scope: "mine", username: me.username, page: "1", limit: "10" });
+    const res = await fetch(`${LOGREQUEST_BASE_URL}/api/internal/issues?${params}`, {
+      headers: { "x-internal-key": INTERNAL_KEY },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      issues = data.requests ?? [];
+      total = data.total ?? 0;
+    }
+  }
 
   const navItems = getPlatformNav({
     mainBaseUrl: MAIN_BASE_URL,
@@ -66,25 +72,25 @@ export default async function IssuesPage() {
       <h1 className="iipe-page-title">Technical Issues</h1>
       <p className="iipe-page-sub">
         Something not working in an application? Raise a technical issue against any app on the
-        intranet — it is tracked here and the Super Admin will work it.
+        intranet — it is handled by the Intranet Issue team (POC) in Log Request.
       </p>
 
       <div className="mt-4">
         <IssuesClient
           apps={apps}
-          initialIssues={issues.map((i) => ({
+          initialIssues={issues.map((i: any) => ({
             id: i.id,
-            applicationId: i.applicationId,
-            application: i.application,
-            username: i.username,
-            name: i.name,
+            applicationId: i.appName ?? "",
+            application: { id: i.appName ?? "", name: i.appName ?? "Intranet", url: "" },
+            username: i.requestedBy?.username ?? "",
+            name: i.requestedBy?.name ?? "",
             title: i.title,
             description: i.description,
-            status: i.status,
+            status: i.status === "IN_PROGRESS" || i.status === "PENDING" ? "IN_PROGRESS" : i.status === "RESOLVED" ? "RESOLVED" : i.status === "CLOSED" ? "CLOSED" : "OPEN",
             priority: i.priority,
             resolution: i.resolution,
-            resolvedAt: i.resolvedAt ? i.resolvedAt.toISOString() : null,
-            createdAt: i.createdAt.toISOString(),
+            resolvedAt: i.resolvedAt,
+            createdAt: i.createdAt,
           }))}
           initialTotal={total}
           scope="mine"

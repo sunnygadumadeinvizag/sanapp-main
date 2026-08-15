@@ -167,7 +167,7 @@ export function IssuesClient({
       <div className="iipe-card">
         <h3 className="iipe-h3">Report a technical issue</h3>
         <p className="iipe-muted" style={{ marginBottom: 12 }}>
-          Choose the application and describe the problem — the issue is tracked centrally and the Super Admin works it.
+          Choose the application and describe the problem — the issue is raised in Log Request (Intranet Issue) and the category's POC works it.
         </p>
         <form onSubmit={raise} className="space-y-3">
           <div className="iipe-grid iipe-grid-2">

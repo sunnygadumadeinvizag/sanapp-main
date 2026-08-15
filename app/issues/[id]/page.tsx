@@ -2,14 +2,16 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
 import { userNavItems } from "../../components/adminNav";
-import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import { IssueDetailClient } from "../../components/IssueDetailClient";
 
 export const dynamic = "force-dynamic";
 
 const SSO_BASE_URL = process.env.SSO_BASE_URL!;
 const MAIN_BASE_URL = process.env.MAIN_BASE_URL!;
+const LOGREQUEST_BASE_URL = process.env.LOGREQUEST_BASE_URL ?? "";
+const INTERNAL_KEY = process.env.LOGREQUEST_INTERNAL_KEY ?? "";
 
 export default async function IssueDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const store = await cookies();
@@ -17,16 +19,52 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
   const me = await verifyMainSession(session);
   const { id } = await params;
 
-  const issue = await prisma.technicalIssue.findUnique({
-    where: { id },
-    include: { application: { select: { id: true, name: true, url: true } } },
+  // Issues live in Log Request (Intranet Issue category).
+  const res = await fetch(`${LOGREQUEST_BASE_URL}/api/internal/issues/${id}`, {
+    headers: { "x-internal-key": INTERNAL_KEY },
+    cache: "no-store",
   });
-  if (!issue) notFound();
+  if (!res.ok) notFound();
+  const data = await res.json();
+  const r = data.issue;
 
   const canView =
     !!me &&
-    (me.role === "SUPER_ADMIN" || issue.userId === me.sub || issue.username === me.username);
+    (me.role === "SUPER_ADMIN" || r.requestedBy?.username === me.username);
   if (!canView) notFound();
+
+  const regApp = r.appName
+    ? await prisma.application.findFirst({ where: { name: r.appName, enabled: true }, select: { id: true, name: true, url: true } })
+    : null;
+  const issue: {
+    id: string;
+    applicationId: string;
+    application: { id: string; name: string; url: string };
+    username: string;
+    name: string;
+    title: string;
+    description: string;
+    status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+    priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+    resolution: string | null;
+    resolvedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } = {
+    id: r.id,
+    applicationId: regApp?.id ?? r.appName ?? "",
+    application: regApp ?? { id: r.appName ?? "", name: r.appName ?? "Intranet", url: "" },
+    username: r.requestedBy?.username ?? "",
+    name: r.requestedBy?.name ?? "",
+    title: r.title,
+    description: r.description,
+    status: (r.status === "IN_PROGRESS" || r.status === "PENDING" ? "IN_PROGRESS" : r.status === "RESOLVED" ? "RESOLVED" : r.status === "CLOSED" ? "CLOSED" : "OPEN") as "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED",
+    priority: (["LOW", "MEDIUM", "HIGH", "URGENT"].includes(r.priority) ? r.priority : "MEDIUM") as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+    resolution: r.resolution,
+    resolvedAt: r.resolvedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt ?? r.createdAt,
+  };
 
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
   const navItems = getPlatformNav({
@@ -60,31 +98,12 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ id
       <div className="mb-3">
         <Breadcrumb
           items={[
-            { label: "Technical Issues", href: "/issues" },
-            { label: issue.application.name },
-            { label: issue.title.length > 40 ? issue.title.slice(0, 40) + "…" : issue.title },
+            { label: "Technical Issues", href: apiPath("/issues") },
+            { label: issue.title },
           ]}
         />
       </div>
-
-      <IssueDetailClient
-        issue={{
-          id: issue.id,
-          applicationId: issue.applicationId,
-          application: issue.application,
-          username: issue.username,
-          name: issue.name,
-          title: issue.title,
-          description: issue.description,
-          status: issue.status,
-          priority: issue.priority,
-          resolution: issue.resolution,
-          resolvedAt: issue.resolvedAt ? issue.resolvedAt.toISOString() : null,
-          createdAt: issue.createdAt.toISOString(),
-          updatedAt: issue.updatedAt.toISOString(),
-        }}
-        isSuperAdmin={!!isSuperAdmin}
-      />
+      <IssueDetailClient issue={issue} isSuperAdmin={isSuperAdmin} />
     </PageShell>
   );
 }
