@@ -48,6 +48,14 @@ async function main() {
       url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006",
       openInNewTab: false,
     },
+    {
+      clientId: "sanapp-inventory",
+      name: "Inventory & Asset Tracking",
+      description: "Independent application #6 — asset tracking (inventory schema in sanapp_logrequest_db, own roles)",
+      category: "IT Services",
+      url: process.env.APP6_PUBLIC_URL ?? "http://localhost:3007",
+      openInNewTab: false,
+    },
   ];
 
   for (const a of applications) {
@@ -104,6 +112,13 @@ async function main() {
     { username: "geeta", clientId: "sanapp-logrequest" },
     { username: "kiran", clientId: "sanapp-logrequest" },
     { username: "venkat", clientId: "sanapp-logrequest" },
+    { username: "admin", clientId: "sanapp-inventory" },
+    { username: "sanyasi", clientId: "sanapp-inventory" },
+    { username: "ramesh", clientId: "sanapp-inventory" },
+    { username: "lakshmi", clientId: "sanapp-inventory" },
+    { username: "geeta", clientId: "sanapp-inventory" },
+    { username: "kiran", clientId: "sanapp-inventory" },
+    { username: "venkat", clientId: "sanapp-inventory" },
   ];
 
   for (const g of grants) {
