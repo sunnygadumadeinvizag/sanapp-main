@@ -9,12 +9,12 @@ async function main() {
 
   const applications = [
     {
-      clientId: "sanapp-app1",
-      name: "Academic ERP",
-      description: "Independent application #1 — own database (sanapp_app1_db), own roles",
-      category: "Academic",
-      url: process.env.APP1_PUBLIC_URL ?? "http://localhost:3002",
-      openInNewTab: true,
+      clientId: "sanapp-wikidocs",
+      name: "Wiki Docs",
+      description: "Institute documentation wiki — sections, guides and knowledge base (own database sanapp_wikidocs_db, own roles)",
+      category: "General",
+      url: process.env.APP1_PUBLIC_URL ?? "http://localhost:3002/wikidocs",
+      openInNewTab: false,
     },
     {
       clientId: "sanapp-app2",
@@ -66,6 +66,10 @@ async function main() {
     });
   }
 
+  // Academic ERP was replaced by Wiki Docs — drop the old registration and grants.
+  await prisma.userApplication.deleteMany({ where: { application: { clientId: "sanapp-app1" } } });
+  await prisma.application.deleteMany({ where: { clientId: "sanapp-app1" } });
+
   // Resolve usernames → SSO user ids (identity lives in sanapp_sso_db, not here).
   const userIds: Record<string, string> = {};
   try {
@@ -86,16 +90,16 @@ async function main() {
   }
 
   const grants = [
-    { username: "sanyasi", clientId: "sanapp-app1" },
+    { username: "sanyasi", clientId: "sanapp-wikidocs" },
     { username: "sanyasi", clientId: "sanapp-app2" },
     { username: "sanyasi", clientId: "sanapp-app3" },
-    { username: "lakshmi", clientId: "sanapp-app1" },
-    { username: "admin", clientId: "sanapp-app1" },
+    { username: "lakshmi", clientId: "sanapp-wikidocs" },
+    { username: "admin", clientId: "sanapp-wikidocs" },
     { username: "admin", clientId: "sanapp-app3" },
-    { username: "ramesh", clientId: "sanapp-app1" },
+    { username: "ramesh", clientId: "sanapp-wikidocs" },
     { username: "ramesh", clientId: "sanapp-app2" },
     { username: "ramesh", clientId: "sanapp-app3" },
-    { username: "geeta", clientId: "sanapp-app1" },
+    { username: "geeta", clientId: "sanapp-wikidocs" },
     { username: "geeta", clientId: "sanapp-app3" },
     { username: "kiran", clientId: "sanapp-app2" },
     { username: "venkat", clientId: "sanapp-app2" },
