@@ -1,20 +1,12 @@
 import type { NavItem } from "sanapp-common-ui";
 
 /**
- * Sidebar for the "user" area of the portal (Home, My Apps, Applications,
- * My Account) — the same for every role.
+ * Sidebar for the "user" area of the portal. The home page itself IS the My
+ * Apps launcher (grouped by category, with favourites), so the sidebar is just
+ * Home — account/platform links live in the header (profile + Apps menus).
  */
-export function userNavItems(
-  active?: "home" | "my-apps" | "applications" | "issues" | "account",
-  ssoBaseUrl?: string
-): NavItem[] {
-  return [
-    { label: "Home", href: "/", active: active === "home" },
-    { label: "My Apps", href: "/my-apps", active: active === "my-apps" },
-    { label: "Applications", href: "/applications", active: active === "applications" },
-    { label: "Technical Issues", href: "/issues", active: active === "issues" },
-    { label: "My Account", href: `${ssoBaseUrl ?? "/"}/account`, active: active === "account" },
-  ];
+export function userNavItems(active?: "home"): NavItem[] {
+  return [{ label: "Home", href: "/", active: active === "home" }];
 }
 
 /**
@@ -24,7 +16,7 @@ export function userNavItems(
  * Every admin function lives under /admin-console/<function>.
  */
 export function adminNavItems(
-  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email" | "issues"
+  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email"
 ): NavItem[] {
   return [
     { label: "Admin Console", href: "/admin-console", heading: true, active: active === "console" },
@@ -35,7 +27,6 @@ export function adminNavItems(
     { label: "Announcements", href: "/admin-console/announcements", active: active === "announcements" },
     { label: "Theme & Branding", href: "/admin-console/theme", active: active === "theme" },
     { label: "Email & SMTP", href: "/admin-console/email", active: active === "email" },
-    { label: "Technical Issues", href: "/admin-console/issues", active: active === "issues" },
   ];
 }
 

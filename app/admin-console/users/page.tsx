@@ -136,14 +136,14 @@ export default async function UsersPage() {
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });
-  const sidebarItems = isSuperAdmin ? adminNavItems("users") : userNavItems("home", SSO_BASE_URL);
+  const sidebarItems = isSuperAdmin ? adminNavItems("users") : userNavItems("home");
 
   return (
     <PageShell
       appName="Main"
       header={{
         navItems,
-        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
+        appsLauncherHref: MAIN_BASE_URL,
         right: me ? (
           <UserMenu
             name={me.name}
@@ -152,7 +152,6 @@ export default async function UsersPage() {
             signOutHref="/api/logout"
           >
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
-            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>

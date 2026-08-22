@@ -66,7 +66,7 @@ export default async function AppMatrixPage({
       appName="Main"
       header={{
         navItems,
-        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
+        appsLauncherHref: MAIN_BASE_URL,
         right: me ? (
           <UserMenu
             name={me.name}
@@ -75,7 +75,6 @@ export default async function AppMatrixPage({
             signOutHref="/api/logout"
           >
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
-            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
             <div className="iipe-dropdown-section">Admin Console</div>
             <a href={apiPath("/admin-console")}>Admin Console</a>
           </UserMenu>

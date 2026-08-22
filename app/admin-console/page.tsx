@@ -57,12 +57,6 @@ const CONSOLE_SECTIONS: {
     href: "/admin-console/email",
     icon: "✉️",
   },
-  {
-    title: "Technical Issues",
-    desc: "Track and resolve technical issues raised by users against applications.",
-    href: "/admin-console/issues",
-    icon: "🛠",
-  },
 ];
 
 export default async function AdminConsolePage() {
@@ -83,7 +77,7 @@ export default async function AdminConsolePage() {
       appName="Main"
       header={{
         navItems,
-        appsLauncherHref: `${MAIN_BASE_URL}/my-apps`,
+        appsLauncherHref: MAIN_BASE_URL,
         right: me ? (
           <UserMenu
             name={me.name}
@@ -92,7 +86,6 @@ export default async function AdminConsolePage() {
             signOutHref="/api/logout"
           >
             <a href={`${SSO_BASE_URL}/account`}>My Account</a>
-            <a href={`${MAIN_BASE_URL}/my-apps`}>My Apps</a>
             <div className="iipe-dropdown-section">Admin Console</div>
             <a href={apiPath("/admin-console")}>Admin Console</a>
           </UserMenu>
