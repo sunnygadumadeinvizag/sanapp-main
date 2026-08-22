@@ -6,7 +6,7 @@ export async function proxy(request: NextRequest) {
 
   // Strip the basePath (/sso, /main, /app1...) before matching routes so the
   // proxy works identically when the app is served behind Apache with a prefix.
-  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || "/main";
   const p =
     BASE_PATH && (pathname === BASE_PATH || pathname.startsWith(BASE_PATH + "/"))
       ? pathname.slice(BASE_PATH.length) || "/"

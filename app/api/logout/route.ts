@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   // The referer path already carries the base path (/app1, /main ...) — strip
   // it so APP_BASE_URL + returnTo does not double-prefix.
-  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || "/main";
   if (BASE_PATH && (returnTo === BASE_PATH || returnTo.startsWith(BASE_PATH + "/"))) {
     returnTo = returnTo.slice(BASE_PATH.length) || "/";
   }

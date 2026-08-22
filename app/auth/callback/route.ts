@@ -7,10 +7,10 @@ const CLIENT_ID = process.env.MAIN_CLIENT_ID!;
 const CLIENT_SECRET = process.env.MAIN_CLIENT_SECRET!;
 
 export async function GET(request: NextRequest) {
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const proto = request.headers.get("x-forwarded-proto") ?? "http";
-const host = request.headers.get("host") ?? request.nextUrl.host;
-const publicOrigin = `${proto}://${host}`;
+  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || "/main";
+  const proto = request.headers.get("x-forwarded-proto") ?? "http";
+  const host = request.headers.get("host") ?? request.nextUrl.host;
+  const publicOrigin = `${proto}://${host}`;
   const url = request.nextUrl;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
