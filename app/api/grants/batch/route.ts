@@ -6,9 +6,9 @@ import { verifyMainSession } from "@/lib/session";
 /**
  * POST /api/grants/batch
  * Body options:
- * 1) { action: "grant" | "revoke", users: { userId?: string; username: string }[], clientIds: string[] }
- * 2) { action: "set_exact", users: { userId?: string; username: string }[], clientIds: string[] }
- * 3) { operations: { userId?: string; username: string; clientId: string; allowed: boolean }[] }
+ * 1) { action: "grant" | "revoke" | "set_role", role?: "USER" | "APP_ADMIN", users: { userId?: string; username: string }[], clientIds: string[] }
+ * 2) { action: "set_exact", role?: "USER" | "APP_ADMIN", users: { userId?: string; username: string }[], clientIds: string[] }
+ * 3) { operations: { userId?: string; username: string; clientId: string; allowed: boolean; role?: string }[] }
  */
 export async function POST(request: NextRequest) {
   const store = await cookies();
@@ -22,57 +22,47 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { action, users, clientIds, operations } = body as {
-    action?: "grant" | "revoke" | "set_exact";
+  const { action, role, users, clientIds, operations } = body as {
+    action?: "grant" | "revoke" | "set_exact" | "set_role";
+    role?: "USER" | "APP_ADMIN";
     users?: { userId?: string | null; username: string }[];
     clientIds?: string[];
-    operations?: { userId?: string | null; username: string; clientId: string; allowed: boolean }[];
+    operations?: { userId?: string | null; username: string; clientId: string; allowed: boolean; role?: string }[];
   };
 
-  // Pre-fetch applications to map clientId -> applicationId
   const apps = await prisma.application.findMany();
   const appByClientId = new Map(apps.map((a) => [a.clientId, a.id]));
+  const defaultRole = role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
 
   if (Array.isArray(operations) && operations.length > 0) {
-    const creates: { userId: string | null; username: string; applicationId: string }[] = [];
-    const deleteConditions: { username: string; applicationId: string }[] = [];
-
-    for (const op of operations) {
-      const appId = appByClientId.get(op.clientId);
-      if (!appId) continue;
-
-      if (op.allowed) {
-        creates.push({
-          userId: op.userId ?? null,
-          username: op.username,
-          applicationId: appId,
-        });
-      } else {
-        deleteConditions.push({
-          username: op.username,
-          applicationId: appId,
-        });
-      }
-    }
-
-    // Execute operations in a transaction
     await prisma.$transaction(async (tx) => {
-      for (const d of deleteConditions) {
-        await tx.userApplication.deleteMany({
-          where: { username: d.username, applicationId: d.applicationId },
-        });
-      }
-      for (const c of creates) {
-        const existing = await tx.userApplication.findFirst({
-          where: { username: c.username, applicationId: c.applicationId },
-        });
-        if (!existing) {
-          await tx.userApplication.create({
-            data: {
-              userId: c.userId,
-              username: c.username,
-              applicationId: c.applicationId,
-            },
+      for (const op of operations) {
+        const appId = appByClientId.get(op.clientId);
+        if (!appId) continue;
+
+        if (op.allowed) {
+          const opRole = op.role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
+          const existing = await tx.userApplication.findFirst({
+            where: { username: op.username, applicationId: appId },
+          });
+          if (!existing) {
+            await tx.userApplication.create({
+              data: {
+                userId: op.userId ?? null,
+                username: op.username,
+                applicationId: appId,
+                role: opRole,
+              },
+            });
+          } else {
+            await tx.userApplication.update({
+              where: { id: existing.id },
+              data: { role: opRole },
+            });
+          }
+        } else {
+          await tx.userApplication.deleteMany({
+            where: { username: op.username, applicationId: appId },
           });
         }
       }
@@ -95,7 +85,7 @@ export async function POST(request: NextRequest) {
     const usernames = users.map((u) => u.username);
 
     await prisma.$transaction(async (tx) => {
-      if (action === "grant") {
+      if (action === "grant" || action === "set_role") {
         for (const user of users) {
           for (const appId of targetAppIds) {
             const existing = await tx.userApplication.findFirst({
@@ -107,7 +97,13 @@ export async function POST(request: NextRequest) {
                   userId: user.userId ?? null,
                   username: user.username,
                   applicationId: appId,
+                  role: defaultRole,
                 },
+              });
+            } else {
+              await tx.userApplication.update({
+                where: { id: existing.id },
+                data: { role: defaultRole },
               });
             }
           }
@@ -120,7 +116,6 @@ export async function POST(request: NextRequest) {
           },
         });
       } else if (action === "set_exact") {
-        // Remove all current apps for these users, then assign the target apps
         await tx.userApplication.deleteMany({
           where: {
             username: { in: usernames },
@@ -133,6 +128,7 @@ export async function POST(request: NextRequest) {
                 userId: user.userId ?? null,
                 username: user.username,
                 applicationId: appId,
+                role: defaultRole,
               },
             });
           }
@@ -143,6 +139,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       action,
+      role: defaultRole,
       usersAffected: users.length,
       appsAffected: targetAppIds.length,
     });

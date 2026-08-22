@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Called by independent applications (server-to-server) to answer:
- * "Is this user allowed to access this application?"
+ * "Is this user allowed to access this application, and what is their app role (USER vs APP_ADMIN)?"
  *
  * Body: { userId, username, clientId }
  * Header: x-app-key (shared key, must match MAIN_API_KEY)
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     where: { clientId },
   });
   if (!application || !application.enabled) {
-    return NextResponse.json({ allowed: false }, { status: 200 });
+    return NextResponse.json({ allowed: false, role: "USER" }, { status: 200 });
   }
 
   const grant = await prisma.userApplication.findFirst({
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     allowed: grant !== null,
+    role: grant?.role ?? "USER",
     application: { name: application.name },
   });
 }

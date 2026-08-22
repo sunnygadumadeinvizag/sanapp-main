@@ -28,6 +28,7 @@ export type MatrixGrant = {
   userId: string | null;
   username: string;
   clientId: string;
+  role?: "USER" | "APP_ADMIN" | string;
 };
 
 export type DepartmentOption = {

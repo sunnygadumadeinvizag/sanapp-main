@@ -42,17 +42,17 @@ export function AccessMatrixGrid({
   const [filterAppGrant, setFilterAppGrant] = useState<string>("ALL");
   const [filterSelectionOnly, setFilterSelectionOnly] = useState<boolean>(false);
 
-  // Grant lookup
-  const grantLookup = useMemo(() => {
-    const set = new Set<string>();
+  // Grant lookup: Map "username:clientId" -> { exists: boolean, role: "USER" | "APP_ADMIN" }
+  const grantMap = useMemo(() => {
+    const map = new Map<string, string>();
     for (const g of grants) {
-      set.add(`${g.username}:${g.clientId}`);
+      map.set(`${g.username}:${g.clientId}`, g.role || "USER");
     }
-    return set;
+    return map;
   }, [grants]);
 
-  function hasGrant(username: string, clientId: string) {
-    return grantLookup.has(`${username}:${clientId}`);
+  function getGrantRole(username: string, clientId: string): string | null {
+    return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
   // Filtered users
@@ -74,44 +74,58 @@ export function AccessMatrixGrid({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => grantLookup.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => grantLookup.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
         if (hasAny) return false;
+      } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
+        const cid = filterAppGrant.replace("HAS_ADMIN_", "");
+        if (grantMap.get(`${u.username}:${cid}`) !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!grantLookup.has(`${u.username}:${cid}`)) return false;
+        if (!grantMap.has(`${u.username}:${cid}`)) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (grantLookup.has(`${u.username}:${cid}`)) return false;
+        if (grantMap.has(`${u.username}:${cid}`)) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
 
       return true;
     });
-  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantLookup, applications]);
+  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, applications]);
 
   // Statistics
   const appStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const a of applications) counts[a.clientId] = 0;
-    for (const g of grants) {
-      if (counts[g.clientId] !== undefined) counts[g.clientId] += 1;
+    const totalGrants: Record<string, number> = {};
+    const adminGrants: Record<string, number> = {};
+    for (const a of applications) {
+      totalGrants[a.clientId] = 0;
+      adminGrants[a.clientId] = 0;
     }
-    return counts;
+    for (const g of grants) {
+      if (totalGrants[g.clientId] !== undefined) {
+        totalGrants[g.clientId] += 1;
+        if (g.role === "APP_ADMIN") {
+          adminGrants[g.clientId] += 1;
+        }
+      }
+    }
+    return { totalGrants, adminGrants };
   }, [applications, grants]);
 
-  // Single Toggle
-  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean) {
+  // Single Toggle (Grant/Revoke or change role)
+  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
     const key = `${user.username}:${app.clientId}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
 
+    const oldGrants = [...grants];
+
     setGrants((prev) => {
       const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
+      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
     });
 
     try {
@@ -123,14 +137,12 @@ export function AccessMatrixGrid({
           username: user.username,
           clientId: app.clientId,
           allowed: checked,
+          role,
         }),
       });
       if (!res.ok) throw new Error("Request failed");
     } catch {
-      setGrants((prev) => {
-        const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-        return !checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
-      });
+      setGrants(oldGrants);
       setFeedback({ type: "danger", message: `Failed to update access for @${user.username} on ${app.name}` });
     } finally {
       setBusyKeys((prev) => {
@@ -142,7 +154,10 @@ export function AccessMatrixGrid({
   }
 
   // Batch execution
-  async function executeBatch(action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all") {
+  async function executeBatch(
+    action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "set_role",
+    targetRole: "USER" | "APP_ADMIN" = "USER"
+  ) {
     if (selectedUsernames.size === 0) {
       setFeedback({ type: "info", message: "Please select at least one user first." });
       return;
@@ -165,7 +180,8 @@ export function AccessMatrixGrid({
     setBatchBusy(true);
     setFeedback(null);
 
-    const apiAction = action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
+    const apiAction =
+      action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
 
     try {
       const res = await fetch(apiPath("/api/grants/batch"), {
@@ -173,6 +189,7 @@ export function AccessMatrixGrid({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: apiAction,
+          role: targetRole,
           users: selectedUsersList.map((u) => ({ userId: u.id, username: u.username })),
           clientIds: targetClientIds,
         }),
@@ -194,14 +211,17 @@ export function AccessMatrixGrid({
           updated = updated.filter((g) => !selectedUserSet.has(g.username));
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              updated.push({ userId: u.id, username: u.username, clientId: cid });
+              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
             }
           }
-        } else if (apiAction === "grant") {
+        } else if (apiAction === "grant" || apiAction === "set_role") {
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              if (!updated.some((g) => g.username === u.username && g.clientId === cid)) {
-                updated.push({ userId: u.id, username: u.username, clientId: cid });
+              const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], role: targetRole };
+              } else {
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
               }
             }
           }
@@ -209,15 +229,10 @@ export function AccessMatrixGrid({
         return updated;
       });
 
-      const actionText =
-        action === "grant" || action === "grant_all"
-          ? "Granted"
-          : action === "revoke" || action === "revoke_all"
-          ? "Revoked"
-          : "Synchronized";
+      const roleStr = targetRole === "APP_ADMIN" ? " as APP_ADMIN" : "";
       setFeedback({
         type: "success",
-        message: `Successfully ${actionText} access for ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s).`,
+        message: `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
       });
     } catch (err: any) {
       setFeedback({ type: "danger", message: err.message || "Failed to execute batch update." });
@@ -270,7 +285,10 @@ export function AccessMatrixGrid({
       `"${u.primaryRole}"`,
       `"${(u.departmentName || "").replace(/"/g, '""')}"`,
       `"${(u.designation || "").replace(/"/g, '""')}"`,
-      ...applications.map((a) => (hasGrant(u.username, a.clientId) ? '"YES"' : '"NO"')),
+      ...applications.map((a) => {
+        const r = getGrantRole(u.username, a.clientId);
+        return r ? `"${r}"` : '"NO"';
+      }),
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -328,7 +346,7 @@ export function AccessMatrixGrid({
         </div>
 
         <div style={{ background: "var(--iipe-surface)", border: "1px solid var(--iipe-border)", borderRadius: "var(--iipe-radius)", padding: "12px 16px" }}>
-          <div className="iipe-muted" style={{ fontSize: "0.78rem", textTransform: "uppercase", fontWeight: 600 }}>Total Grants</div>
+          <div className="iipe-muted" style={{ fontSize: "0.78rem", textTransform: "uppercase", fontWeight: 600 }}>Total Active Grants</div>
           <div style={{ fontSize: "1.4rem", fontWeight: 700, marginTop: 4, color: "var(--iipe-primary)" }}>{grants.length}</div>
         </div>
 
@@ -406,12 +424,17 @@ export function AccessMatrixGrid({
               <option value="ALL">All Users</option>
               <option value="ANY">Has At Least 1 App</option>
               <option value="NONE">Has Zero Apps (No Access)</option>
-              <optgroup label="Has Access to Specific App">
+              <optgroup label="App Admin for Application">
                 {applications.map((a) => (
-                  <option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Has: {a.name}</option>
+                  <option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>
                 ))}
               </optgroup>
-              <optgroup label="Missing Access to Specific App">
+              <optgroup label="Has Access to Application">
+                {applications.map((a) => (
+                  <option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Access: {a.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Missing Access to Application">
                 {applications.map((a) => (
                   <option key={`missing_${a.clientId}`} value={`MISSING_${a.clientId}`}>Missing: {a.name}</option>
                 ))}
@@ -507,7 +530,7 @@ export function AccessMatrixGrid({
                 {selectedUsernames.size} Users Selected
               </span>
               <span className="iipe-muted" style={{ fontSize: "0.88rem" }}>
-                Choose application(s) to grant or revoke in bulk:
+                Choose application(s) to grant, promote to APP_ADMIN, or revoke:
               </span>
             </div>
 
@@ -582,10 +605,20 @@ export function AccessMatrixGrid({
               type="button"
               className="iipe-btn primary"
               disabled={batchBusy || batchSelectedApps.size === 0}
-              onClick={() => executeBatch("grant")}
-              style={{ minWidth: 160 }}
+              onClick={() => executeBatch("grant", "USER")}
             >
-              {batchBusy ? "Processing..." : `+ Grant Selected (${batchSelectedApps.size})`}
+              {batchBusy ? "Processing..." : `+ Grant as User (${batchSelectedApps.size})`}
+            </button>
+
+            <button
+              type="button"
+              className="iipe-btn primary"
+              style={{ background: "#d9a441", borderColor: "#c89432", color: "#1c2b28", fontWeight: 700 }}
+              disabled={batchBusy || batchSelectedApps.size === 0}
+              onClick={() => executeBatch("set_role", "APP_ADMIN")}
+              title="Designate selected users as App Admin for chosen applications"
+            >
+              {batchBusy ? "Processing..." : `⭐ Make App Admin (${batchSelectedApps.size})`}
             </button>
 
             <button
@@ -593,22 +626,8 @@ export function AccessMatrixGrid({
               className="iipe-btn danger"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("revoke")}
-              style={{ minWidth: 160 }}
             >
               {batchBusy ? "Processing..." : `- Revoke Selected (${batchSelectedApps.size})`}
-            </button>
-
-            <button
-              type="button"
-              className="iipe-btn secondary"
-              disabled={batchBusy || batchSelectedApps.size === 0}
-              onClick={() => {
-                if (window.confirm(`Set EXACT access for ${selectedUsernames.size} users to ONLY have the ${batchSelectedApps.size} selected app(s)?`)) {
-                  executeBatch("set_exact");
-                }
-              }}
-            >
-              🔄 Sync Exact Apps
             </button>
 
             <span className="iipe-spacer" />
@@ -619,7 +638,7 @@ export function AccessMatrixGrid({
               disabled={batchBusy}
               onClick={() => {
                 if (window.confirm(`Grant ALL enabled apps to ${selectedUsernames.size} selected user(s)?`)) {
-                  executeBatch("grant_all");
+                  executeBatch("grant_all", "USER");
                 }
               }}
             >
@@ -662,14 +681,20 @@ export function AccessMatrixGrid({
               <th style={{ minWidth: 260, borderBottom: "2px solid var(--iipe-border)" }}>User &amp; Department</th>
               <th style={{ minWidth: 150, borderBottom: "2px solid var(--iipe-border)" }}>Primary Role</th>
               {applications.map((app) => {
-                const count = appStats[app.clientId] || 0;
+                const totalCount = appStats.totalGrants[app.clientId] || 0;
+                const adminCount = appStats.adminGrants[app.clientId] || 0;
                 return (
-                  <th key={app.clientId} style={{ textAlign: "center", minWidth: 120, borderBottom: "2px solid var(--iipe-border)", padding: "10px 8px" }}>
+                  <th key={app.clientId} style={{ textAlign: "center", minWidth: 130, borderBottom: "2px solid var(--iipe-border)", padding: "10px 8px" }}>
                     <div style={{ fontWeight: 700 }}>{app.name}</div>
                     <div style={{ fontSize: "0.72rem", marginTop: 2, fontWeight: 400, color: "var(--iipe-muted)" }}>
                       <span style={{ background: "var(--iipe-primary-light)", color: "var(--iipe-primary-dark)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>
-                        {count} / {users.length}
+                        {totalCount} / {users.length}
                       </span>
+                      {adminCount > 0 && (
+                        <span style={{ marginLeft: 4, color: "var(--iipe-accent)", fontWeight: 700 }} title={`${adminCount} App Admin(s)`}>
+                          ★{adminCount}
+                        </span>
+                      )}
                     </div>
                   </th>
                 );
@@ -730,7 +755,9 @@ export function AccessMatrixGrid({
                       )}
                     </td>
                     {applications.map((app) => {
-                      const checked = hasGrant(user.username, app.clientId);
+                      const currentRole = getGrantRole(user.username, app.clientId);
+                      const isGranted = currentRole !== null;
+                      const isAppAdmin = currentRole === "APP_ADMIN";
                       const cellKey = `${user.username}:${app.clientId}`;
                       const isBusy = busyKeys.has(cellKey) || batchBusy;
                       const disabled = isBusy || !app.enabled;
@@ -740,22 +767,48 @@ export function AccessMatrixGrid({
                           style={{
                             textAlign: "center",
                             verticalAlign: "middle",
-                            background: checked ? "color-mix(in srgb, var(--iipe-primary) 6%, transparent)" : undefined,
+                            background: isAppAdmin
+                              ? "color-mix(in srgb, var(--iipe-accent) 15%, transparent)"
+                              : isGranted
+                              ? "color-mix(in srgb, var(--iipe-primary) 6%, transparent)"
+                              : undefined,
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={(e) => toggleSingle(user, app, e.target.checked)}
-                            aria-label={`${user.name} — ${app.name}`}
-                            style={{
-                              width: 19,
-                              height: 19,
-                              cursor: disabled ? "not-allowed" : "pointer",
-                              accentColor: "var(--iipe-primary)",
-                            }}
-                          />
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                            <input
+                              type="checkbox"
+                              checked={isGranted}
+                              disabled={disabled}
+                              onChange={(e) => toggleSingle(user, app, e.target.checked, isAppAdmin ? "APP_ADMIN" : "USER")}
+                              aria-label={`${user.name} — ${app.name}`}
+                              style={{
+                                width: 18,
+                                height: 18,
+                                cursor: disabled ? "not-allowed" : "pointer",
+                                accentColor: "var(--iipe-primary)",
+                              }}
+                            />
+                            {isGranted && (
+                              <button
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
+                                style={{
+                                  background: isAppAdmin ? "var(--iipe-accent)" : "var(--iipe-surface)",
+                                  color: isAppAdmin ? "#1c2b28" : "var(--iipe-muted)",
+                                  border: isAppAdmin ? "1px solid #c89432" : "1px solid var(--iipe-border)",
+                                  borderRadius: 4,
+                                  fontSize: "0.65rem",
+                                  fontWeight: isAppAdmin ? 700 : 500,
+                                  padding: "1px 4px",
+                                  cursor: disabled ? "not-allowed" : "pointer",
+                                }}
+                                title={isAppAdmin ? "Click to demote to regular User" : "Click to promote to App Admin"}
+                              >
+                                {isAppAdmin ? "⭐ Admin" : "User"}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       );
                     })}

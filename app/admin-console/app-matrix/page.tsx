@@ -92,6 +92,7 @@ export default async function AppMatrixPage({
     userId: g.userId,
     username: g.username,
     clientId: g.application.clientId,
+    role: g.role || "USER",
   }));
 
   const departments: DepartmentOption[] = ssoDepartments.map((d) => ({

@@ -85,6 +85,7 @@ export default async function AppMatrixInspectorPage({
     userId: g.userId,
     username: g.username,
     clientId: g.application.clientId,
+    role: g.role || "USER",
   }));
 
   const navItems = getPlatformNav({

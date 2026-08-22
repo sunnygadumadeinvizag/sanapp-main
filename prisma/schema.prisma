@@ -77,6 +77,7 @@ model UserApplication {
   username      String
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  role          String      @default("USER") // USER | APP_ADMIN
   grantedAt     DateTime    @default(now())
 
   @@unique([userId, applicationId])

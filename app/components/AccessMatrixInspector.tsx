@@ -33,38 +33,47 @@ export function AccessMatrixInspector({
       : applications[0]?.clientId ?? ""
   );
 
-  // Search & filter within the inspector
+  // Search & filter within inspector
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filterRole, setFilterRole] = useState<string>("ALL");
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "GRANTED" | "UNAUTHORIZED">("ALL");
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "ADMIN" | "USER" | "UNAUTHORIZED">("ALL");
 
-  const grantLookup = useMemo(() => {
-    const set = new Set<string>();
-    for (const g of grants) set.add(`${g.username}:${g.clientId}`);
-    return set;
+  const grantMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of grants) map.set(`${g.username}:${g.clientId}`, g.role || "USER");
+    return map;
   }, [grants]);
 
-  function hasGrant(username: string, clientId: string) {
-    return grantLookup.has(`${username}:${clientId}`);
+  function getGrantRole(username: string, clientId: string): string | null {
+    return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
   // Active inspected app
   const inspectedApp = applications.find((a) => a.clientId === inspectedAppClientId) || applications[0];
 
-  const inspectedAppGrantedUsers = useMemo(() => {
-    if (!inspectedApp) return [];
-    return users.filter((u) => hasGrant(u.username, inspectedApp.clientId));
-  }, [inspectedApp, users, grantLookup]);
+  const inspectedAppStats = useMemo(() => {
+    if (!inspectedApp) return { total: 0, admins: 0, regular: 0 };
+    let admins = 0;
+    let regular = 0;
+    for (const u of users) {
+      const r = getGrantRole(u.username, inspectedApp.clientId);
+      if (r === "APP_ADMIN") admins += 1;
+      else if (r === "USER") regular += 1;
+    }
+    return { total: admins + regular, admins, regular };
+  }, [inspectedApp, users, grantMap]);
 
   // Toggle single user
-  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean) {
+  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
     const key = `${user.username}:${app.clientId}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
 
+    const oldGrants = [...grants];
+
     setGrants((prev) => {
       const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
+      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
     });
 
     try {
@@ -76,14 +85,12 @@ export function AccessMatrixInspector({
           username: user.username,
           clientId: app.clientId,
           allowed: checked,
+          role,
         }),
       });
       if (!res.ok) throw new Error("Request failed");
     } catch {
-      setGrants((prev) => {
-        const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-        return !checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
-      });
+      setGrants(oldGrants);
       setFeedback({ type: "danger", message: `Failed to update access for @${user.username}` });
     } finally {
       setBusyKeys((prev) => {
@@ -99,7 +106,8 @@ export function AccessMatrixInspector({
     userList: MatrixUser[],
     clientId: string,
     grant: boolean,
-    groupName: string
+    groupName: string,
+    role: "USER" | "APP_ADMIN" = "USER"
   ) {
     if (userList.length === 0) return;
     setBatchBusy(true);
@@ -110,6 +118,7 @@ export function AccessMatrixInspector({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: grant ? "grant" : "revoke",
+          role,
           users: userList.map((u) => ({ userId: u.id, username: u.username })),
           clientIds: [clientId],
         }),
@@ -121,7 +130,7 @@ export function AccessMatrixInspector({
         let updated = prev.filter((g) => !(usernames.has(g.username) && g.clientId === clientId));
         if (grant) {
           for (const u of userList) {
-            updated.push({ userId: u.id, username: u.username, clientId });
+            updated.push({ userId: u.id, username: u.username, clientId, role });
           }
         }
         return updated;
@@ -129,7 +138,7 @@ export function AccessMatrixInspector({
 
       setFeedback({
         type: "success",
-        message: `${grant ? "Granted" : "Revoked"} ${inspectedApp?.name} for all ${userList.length} members of "${groupName}".`,
+        message: `${grant ? `Granted (${role === "APP_ADMIN" ? "App Admin" : "User"})` : "Revoked"} ${inspectedApp?.name} for all ${userList.length} members of "${groupName}".`,
       });
     } catch {
       setFeedback({ type: "danger", message: `Failed to update ${groupName}. Please try again.` });
@@ -138,7 +147,7 @@ export function AccessMatrixInspector({
     }
   }
 
-  // Filtered users inside the app inspector table
+  // Filtered users in inspector table
   const displayedUsers = useMemo(() => {
     if (!inspectedApp) return [];
     return users.filter((u) => {
@@ -153,13 +162,14 @@ export function AccessMatrixInspector({
 
       if (filterRole !== "ALL" && u.primaryRole !== filterRole) return false;
 
-      const isGranted = hasGrant(u.username, inspectedApp.clientId);
-      if (filterStatus === "GRANTED" && !isGranted) return false;
-      if (filterStatus === "UNAUTHORIZED" && isGranted) return false;
+      const role = getGrantRole(u.username, inspectedApp.clientId);
+      if (filterStatus === "ADMIN" && role !== "APP_ADMIN") return false;
+      if (filterStatus === "USER" && role !== "USER") return false;
+      if (filterStatus === "UNAUTHORIZED" && role !== null) return false;
 
       return true;
     });
-  }, [users, inspectedApp, searchQuery, filterRole, filterStatus, grantLookup]);
+  }, [users, inspectedApp, searchQuery, filterRole, filterStatus, grantMap]);
 
   if (!inspectedApp) {
     return <div className="iipe-alert">No applications found.</div>;
@@ -185,7 +195,8 @@ export function AccessMatrixInspector({
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {applications.map((app) => {
             const isCurrent = app.clientId === inspectedApp.clientId;
-            const count = users.filter((u) => hasGrant(u.username, app.clientId)).length;
+            const count = users.filter((u) => getGrantRole(u.username, app.clientId) !== null).length;
+            const adminCount = users.filter((u) => getGrantRole(u.username, app.clientId) === "APP_ADMIN").length;
             return (
               <button
                 key={app.clientId}
@@ -214,7 +225,7 @@ export function AccessMatrixInspector({
                     fontSize: "0.75rem",
                   }}
                 >
-                  {count}
+                  {count} {adminCount > 0 && `(★${adminCount})`}
                 </span>
               </button>
             );
@@ -254,20 +265,39 @@ export function AccessMatrixInspector({
             )}
           </div>
 
-          <div
-            style={{
-              textAlign: "center",
-              padding: "12px 24px",
-              background: "var(--iipe-primary-light)",
-              borderRadius: "var(--iipe-radius)",
-            }}
-          >
-            <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--iipe-primary-dark)" }}>
-              {inspectedAppGrantedUsers.length}{" "}
-              <span style={{ fontSize: "0.95rem", fontWeight: 500 }}>/ {users.length}</span>
+          <div style={{ display: "flex", gap: 12 }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "12px 20px",
+                background: "var(--iipe-primary-light)",
+                borderRadius: "var(--iipe-radius)",
+              }}
+            >
+              <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--iipe-primary-dark)" }}>
+                {inspectedAppStats.total}{" "}
+                <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>/ {users.length}</span>
+              </div>
+              <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--iipe-primary-dark)", textTransform: "uppercase" }}>
+                Total Access ({Math.round((inspectedAppStats.total / (users.length || 1)) * 100)}%)
+              </div>
             </div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--iipe-primary-dark)", textTransform: "uppercase" }}>
-              {Math.round((inspectedAppGrantedUsers.length / (users.length || 1)) * 100)}% Access Coverage
+
+            <div
+              style={{
+                textAlign: "center",
+                padding: "12px 20px",
+                background: "color-mix(in srgb, var(--iipe-accent) 20%, transparent)",
+                borderRadius: "var(--iipe-radius)",
+                border: "1px solid #d9a441",
+              }}
+            >
+              <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1c2b28" }}>
+                {inspectedAppStats.admins}
+              </div>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#1c2b28", textTransform: "uppercase" }}>
+                ⭐ App Admins
+              </div>
             </div>
           </div>
         </div>
@@ -278,7 +308,7 @@ export function AccessMatrixInspector({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {PRIMARY_ROLES.map((pr) => {
               const roleUsers = users.filter((u) => u.primaryRole === pr.value);
-              const grantedRoleUsers = roleUsers.filter((u) => hasGrant(u.username, inspectedApp.clientId));
+              const grantedRoleUsers = roleUsers.filter((u) => getGrantRole(u.username, inspectedApp.clientId) !== null);
               const percentage = roleUsers.length > 0 ? Math.round((grantedRoleUsers.length / roleUsers.length) * 100) : 0;
               const allGranted = roleUsers.length > 0 && grantedRoleUsers.length === roleUsers.length;
 
@@ -325,18 +355,27 @@ export function AccessMatrixInspector({
                       className="iipe-btn primary"
                       disabled={batchBusy || roleUsers.length === 0 || allGranted}
                       style={{ padding: "3px 8px", fontSize: "0.74rem", flex: 1 }}
-                      onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, true, pr.label)}
+                      onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, true, pr.label, "USER")}
                     >
-                      + Grant All {roleUsers.length}
+                      + Grant Users
+                    </button>
+                    <button
+                      type="button"
+                      className="iipe-btn secondary"
+                      disabled={batchBusy || roleUsers.length === 0}
+                      style={{ padding: "3px 8px", fontSize: "0.74rem", flex: 1 }}
+                      onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, true, pr.label, "APP_ADMIN")}
+                    >
+                      ⭐ Make Admins
                     </button>
                     <button
                       type="button"
                       className="iipe-btn danger"
                       disabled={batchBusy || grantedRoleUsers.length === 0}
-                      style={{ padding: "3px 8px", fontSize: "0.74rem", flex: 1 }}
+                      style={{ padding: "3px 8px", fontSize: "0.74rem" }}
                       onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, false, pr.label)}
                     >
-                      - Revoke All
+                      Revoke
                     </button>
                   </div>
                 </div>
@@ -384,8 +423,9 @@ export function AccessMatrixInspector({
               style={{ height: 32, fontSize: "0.82rem" }}
             >
               <option value="ALL">All Access Status</option>
-              <option value="GRANTED">Granted Only</option>
-              <option value="UNAUTHORIZED">Unauthorized Only</option>
+              <option value="ADMIN">⭐ App Admins Only</option>
+              <option value="USER">👤 Regular Users Only</option>
+              <option value="UNAUTHORIZED">No Access Only</option>
             </select>
           </div>
         </div>
@@ -397,8 +437,8 @@ export function AccessMatrixInspector({
                 <th>User</th>
                 <th>Role</th>
                 <th>Department</th>
-                <th style={{ width: 140, textAlign: "center" }}>Access Status</th>
-                <th style={{ width: 120, textAlign: "center" }}>Toggle</th>
+                <th style={{ width: 150, textAlign: "center" }}>Access Status</th>
+                <th style={{ width: 220, textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -410,14 +450,20 @@ export function AccessMatrixInspector({
                 </tr>
               ) : (
                 displayedUsers.map((user) => {
-                  const granted = hasGrant(user.username, inspectedApp.clientId);
+                  const role = getGrantRole(user.username, inspectedApp.clientId);
+                  const isGranted = role !== null;
+                  const isAppAdmin = role === "APP_ADMIN";
                   const key = `${user.username}:${inspectedApp.clientId}`;
                   const isBusy = busyKeys.has(key) || batchBusy;
                   return (
                     <tr
                       key={user.id}
                       style={{
-                        background: granted ? "color-mix(in srgb, var(--iipe-primary) 5%, transparent)" : undefined,
+                        background: isAppAdmin
+                          ? "color-mix(in srgb, var(--iipe-accent) 12%, transparent)"
+                          : isGranted
+                          ? "color-mix(in srgb, var(--iipe-primary) 5%, transparent)"
+                          : undefined,
                       }}
                     >
                       <td>
@@ -431,9 +477,13 @@ export function AccessMatrixInspector({
                       </td>
                       <td>{user.departmentName || "—"}</td>
                       <td style={{ textAlign: "center" }}>
-                        {granted ? (
-                          <span className="iipe-badge accent" style={{ fontSize: "0.72rem", fontWeight: 700 }}>
-                            ✓ Granted
+                        {isAppAdmin ? (
+                          <span className="iipe-badge" style={{ fontSize: "0.75rem", fontWeight: 700, background: "#d9a441", color: "#1c2b28" }}>
+                            ⭐ App Admin
+                          </span>
+                        ) : isGranted ? (
+                          <span className="iipe-badge accent" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
+                            ✓ User
                           </span>
                         ) : (
                           <span className="iipe-badge" style={{ fontSize: "0.72rem", color: "var(--iipe-muted)" }}>
@@ -442,15 +492,52 @@ export function AccessMatrixInspector({
                         )}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          className={`iipe-btn ${granted ? "danger" : "primary"}`}
-                          disabled={isBusy || !inspectedApp.enabled}
-                          style={{ padding: "3px 10px", fontSize: "0.75rem" }}
-                          onClick={() => toggleSingle(user, inspectedApp, !granted)}
-                        >
-                          {isBusy ? "..." : granted ? "Revoke" : "Grant"}
-                        </button>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          {!isGranted ? (
+                            <>
+                              <button
+                                type="button"
+                                className="iipe-btn primary"
+                                disabled={isBusy || !inspectedApp.enabled}
+                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                                onClick={() => toggleSingle(user, inspectedApp, true, "USER")}
+                              >
+                                + Grant User
+                              </button>
+                              <button
+                                type="button"
+                                className="iipe-btn secondary"
+                                disabled={isBusy || !inspectedApp.enabled}
+                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                                onClick={() => toggleSingle(user, inspectedApp, true, "APP_ADMIN")}
+                              >
+                                ⭐ Grant Admin
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="iipe-btn secondary"
+                                disabled={isBusy}
+                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                                onClick={() => toggleSingle(user, inspectedApp, true, isAppAdmin ? "USER" : "APP_ADMIN")}
+                                title={isAppAdmin ? "Demote to regular user" : "Promote to App Admin"}
+                              >
+                                {isAppAdmin ? "Demote to User" : "⭐ Make Admin"}
+                              </button>
+                              <button
+                                type="button"
+                                className="iipe-btn danger"
+                                disabled={isBusy}
+                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                                onClick={() => toggleSingle(user, inspectedApp, false)}
+                              >
+                                Revoke
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

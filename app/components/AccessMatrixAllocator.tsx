@@ -41,14 +41,14 @@ export function AccessMatrixAllocator({
   const [filterSelectionOnly, setFilterSelectionOnly] = useState<boolean>(false);
 
   // Lookup
-  const grantLookup = useMemo(() => {
-    const set = new Set<string>();
-    for (const g of grants) set.add(`${g.username}:${g.clientId}`);
-    return set;
+  const grantMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of grants) map.set(`${g.username}:${g.clientId}`, g.role || "USER");
+    return map;
   }, [grants]);
 
-  function hasGrant(username: string, clientId: string) {
-    return grantLookup.has(`${username}:${clientId}`);
+  function getGrantRole(username: string, clientId: string): string | null {
+    return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
   // Filtered users
@@ -70,34 +70,39 @@ export function AccessMatrixAllocator({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => grantLookup.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => grantLookup.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
         if (hasAny) return false;
+      } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
+        const cid = filterAppGrant.replace("HAS_ADMIN_", "");
+        if (grantMap.get(`${u.username}:${cid}`) !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!grantLookup.has(`${u.username}:${cid}`)) return false;
+        if (!grantMap.has(`${u.username}:${cid}`)) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (grantLookup.has(`${u.username}:${cid}`)) return false;
+        if (grantMap.has(`${u.username}:${cid}`)) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
 
       return true;
     });
-  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantLookup, applications]);
+  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, applications]);
 
   // Single Toggle
-  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean) {
+  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
     const key = `${user.username}:${app.clientId}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
 
+    const oldGrants = [...grants];
+
     setGrants((prev) => {
       const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
+      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
     });
 
     try {
@@ -109,14 +114,12 @@ export function AccessMatrixAllocator({
           username: user.username,
           clientId: app.clientId,
           allowed: checked,
+          role,
         }),
       });
       if (!res.ok) throw new Error("Request failed");
     } catch {
-      setGrants((prev) => {
-        const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-        return !checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId }] : rest;
-      });
+      setGrants(oldGrants);
       setFeedback({ type: "danger", message: `Failed to update access for @${user.username}` });
     } finally {
       setBusyKeys((prev) => {
@@ -128,7 +131,10 @@ export function AccessMatrixAllocator({
   }
 
   // Batch execution
-  async function executeBatch(action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all") {
+  async function executeBatch(
+    action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "set_role",
+    targetRole: "USER" | "APP_ADMIN" = "USER"
+  ) {
     if (selectedUsernames.size === 0) {
       setFeedback({ type: "info", message: "Please select at least one user first." });
       return;
@@ -151,7 +157,8 @@ export function AccessMatrixAllocator({
     setBatchBusy(true);
     setFeedback(null);
 
-    const apiAction = action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
+    const apiAction =
+      action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
 
     try {
       const res = await fetch(apiPath("/api/grants/batch"), {
@@ -159,6 +166,7 @@ export function AccessMatrixAllocator({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: apiAction,
+          role: targetRole,
           users: selectedUsersList.map((u) => ({ userId: u.id, username: u.username })),
           clientIds: targetClientIds,
         }),
@@ -180,14 +188,17 @@ export function AccessMatrixAllocator({
           updated = updated.filter((g) => !selectedUserSet.has(g.username));
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              updated.push({ userId: u.id, username: u.username, clientId: cid });
+              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
             }
           }
-        } else if (apiAction === "grant") {
+        } else if (apiAction === "grant" || apiAction === "set_role") {
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              if (!updated.some((g) => g.username === u.username && g.clientId === cid)) {
-                updated.push({ userId: u.id, username: u.username, clientId: cid });
+              const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], role: targetRole };
+              } else {
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
               }
             }
           }
@@ -195,15 +206,10 @@ export function AccessMatrixAllocator({
         return updated;
       });
 
-      const actionText =
-        action === "grant" || action === "grant_all"
-          ? "Granted"
-          : action === "revoke" || action === "revoke_all"
-          ? "Revoked"
-          : "Synchronized";
+      const roleStr = targetRole === "APP_ADMIN" ? " as APP_ADMIN" : "";
       setFeedback({
         type: "success",
-        message: `Successfully ${actionText} access for ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s).`,
+        message: `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
       });
     } catch (err: any) {
       setFeedback({ type: "danger", message: err.message || "Failed to execute batch update." });
@@ -325,7 +331,7 @@ export function AccessMatrixAllocator({
                 {selectedUsernames.size} Users Selected
               </span>
               <span className="iipe-muted" style={{ fontSize: "0.88rem" }}>
-                Choose application(s) below to allocate or revoke in bulk:
+                Choose application(s) below to allocate as Regular User or APP_ADMIN:
               </span>
             </div>
 
@@ -400,10 +406,19 @@ export function AccessMatrixAllocator({
               type="button"
               className="iipe-btn primary"
               disabled={batchBusy || batchSelectedApps.size === 0}
-              onClick={() => executeBatch("grant")}
-              style={{ minWidth: 160 }}
+              onClick={() => executeBatch("grant", "USER")}
             >
-              {batchBusy ? "Processing..." : `+ Grant Selected (${batchSelectedApps.size})`}
+              {batchBusy ? "Processing..." : `+ Grant as User (${batchSelectedApps.size})`}
+            </button>
+
+            <button
+              type="button"
+              className="iipe-btn primary"
+              style={{ background: "#d9a441", borderColor: "#c89432", color: "#1c2b28", fontWeight: 700 }}
+              disabled={batchBusy || batchSelectedApps.size === 0}
+              onClick={() => executeBatch("set_role", "APP_ADMIN")}
+            >
+              {batchBusy ? "Processing..." : `⭐ Make App Admin (${batchSelectedApps.size})`}
             </button>
 
             <button
@@ -411,22 +426,8 @@ export function AccessMatrixAllocator({
               className="iipe-btn danger"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("revoke")}
-              style={{ minWidth: 160 }}
             >
               {batchBusy ? "Processing..." : `- Revoke Selected (${batchSelectedApps.size})`}
-            </button>
-
-            <button
-              type="button"
-              className="iipe-btn secondary"
-              disabled={batchBusy || batchSelectedApps.size === 0}
-              onClick={() => {
-                if (window.confirm(`Set EXACT access for ${selectedUsernames.size} users to ONLY have the ${batchSelectedApps.size} selected app(s)?`)) {
-                  executeBatch("set_exact");
-                }
-              }}
-            >
-              🔄 Sync Exact Apps
             </button>
 
             <span className="iipe-spacer" />
@@ -437,7 +438,7 @@ export function AccessMatrixAllocator({
               disabled={batchBusy}
               onClick={() => {
                 if (window.confirm(`Grant ALL enabled apps to ${selectedUsernames.size} selected user(s)?`)) {
-                  executeBatch("grant_all");
+                  executeBatch("grant_all", "USER");
                 }
               }}
             >
@@ -499,10 +500,13 @@ export function AccessMatrixAllocator({
               <option value="ALL">All Users</option>
               <option value="ANY">Has At Least 1 App</option>
               <option value="NONE">Has Zero Apps (No Access)</option>
-              <optgroup label="Has Access to Specific App">
-                {applications.map((a) => (<option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Has: {a.name}</option>))}
+              <optgroup label="App Admin of">
+                {applications.map((a) => (<option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>))}
               </optgroup>
-              <optgroup label="Missing Access to Specific App">
+              <optgroup label="Has Access to">
+                {applications.map((a) => (<option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Access: {a.name}</option>))}
+              </optgroup>
+              <optgroup label="Missing Access to">
                 {applications.map((a) => (<option key={`missing_${a.clientId}`} value={`MISSING_${a.clientId}`}>Missing: {a.name}</option>))}
               </optgroup>
             </select>
@@ -545,7 +549,7 @@ export function AccessMatrixAllocator({
         </div>
       </div>
 
-      {/* User Table with App Pills */}
+      {/* User Table with App Pills and Roles */}
       <div className="iipe-table-scroll" style={{ maxHeight: "65vh", overflowY: "auto", border: "1px solid var(--iipe-border)", borderRadius: "var(--iipe-radius)" }}>
         <table className="iipe-table" style={{ width: "100%" }}>
           <thead>
@@ -578,7 +582,13 @@ export function AccessMatrixAllocator({
             ) : (
               filteredUsers.map((user) => {
                 const isSelected = selectedUsernames.has(user.username);
-                const userGrantedApps = applications.filter((a) => hasGrant(user.username, a.clientId));
+                const userGrantedApps = applications
+                  .map((a) => {
+                    const r = getGrantRole(user.username, a.clientId);
+                    return r ? { app: a, role: r } : null;
+                  })
+                  .filter(Boolean) as { app: MatrixApp; role: string }[];
+
                 return (
                   <tr key={user.id} style={{ background: isSelected ? "var(--iipe-primary-light)" : undefined }}>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
@@ -615,40 +625,64 @@ export function AccessMatrixAllocator({
                         </span>
                       ) : (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {userGrantedApps.map((app) => (
-                            <span
-                              key={app.clientId}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                                background: "color-mix(in srgb, var(--iipe-primary) 12%, transparent)",
-                                border: "1px solid color-mix(in srgb, var(--iipe-primary) 30%, transparent)",
-                                borderRadius: 4,
-                                padding: "2px 8px",
-                                fontSize: "0.75rem",
-                                fontWeight: 500,
-                              }}
-                            >
-                              <span>{app.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => toggleSingle(user, app, false)}
-                                title={`Revoke ${app.name}`}
+                          {userGrantedApps.map(({ app, role }) => {
+                            const isAppAdmin = role === "APP_ADMIN";
+                            return (
+                              <span
+                                key={app.clientId}
                                 style={{
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  color: "var(--iipe-danger)",
-                                  fontWeight: "bold",
-                                  fontSize: "0.8rem",
-                                  padding: "0 2px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  background: isAppAdmin
+                                    ? "color-mix(in srgb, var(--iipe-accent) 20%, transparent)"
+                                    : "color-mix(in srgb, var(--iipe-primary) 12%, transparent)",
+                                  border: isAppAdmin
+                                    ? "1.5px solid #d9a441"
+                                    : "1px solid color-mix(in srgb, var(--iipe-primary) 30%, transparent)",
+                                  borderRadius: 4,
+                                  padding: "2px 8px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 500,
                                 }}
                               >
-                                ✕
-                              </button>
-                            </span>
-                          ))}
+                                <span>{isAppAdmin ? "⭐ " : ""}{app.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
+                                  title={isAppAdmin ? "Demote to regular User" : "Promote to App Admin"}
+                                  style={{
+                                    background: isAppAdmin ? "#d9a441" : "var(--iipe-border)",
+                                    color: isAppAdmin ? "#1c2b28" : "inherit",
+                                    border: "none",
+                                    borderRadius: 3,
+                                    cursor: "pointer",
+                                    fontSize: "0.65rem",
+                                    fontWeight: 700,
+                                    padding: "1px 4px",
+                                  }}
+                                >
+                                  {isAppAdmin ? "Admin" : "User"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSingle(user, app, false)}
+                                  title={`Revoke ${app.name}`}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    color: "var(--iipe-danger)",
+                                    fontWeight: "bold",
+                                    fontSize: "0.8rem",
+                                    padding: "0 2px",
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </td>

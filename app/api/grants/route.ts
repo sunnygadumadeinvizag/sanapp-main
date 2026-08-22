@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 
 /**
- * POST { userId?, username, clientId, allowed }
- * Grants or revokes application access. Requires a SUPER_ADMIN Main session.
+ * POST { userId?, username, clientId, allowed, role? }
+ * Grants or revokes application access, optionally assigning APP_ADMIN vs USER role.
+ * Requires a SUPER_ADMIN Main session.
  */
 export async function POST(request: NextRequest) {
   const store = await cookies();
@@ -19,11 +20,12 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { userId, username, clientId, allowed } = body as {
+  const { userId, username, clientId, allowed, role } = body as {
     userId?: string;
     username: string;
     clientId: string;
     allowed: boolean;
+    role?: string;
   };
 
   if (!username || !clientId) {
@@ -35,6 +37,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "application not found" }, { status: 404 });
   }
 
+  const targetRole = role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
+
   if (allowed) {
     const existing = await prisma.userApplication.findFirst({
       where: { applicationId: application.id, username },
@@ -45,7 +49,13 @@ export async function POST(request: NextRequest) {
           userId: userId ?? null,
           username,
           applicationId: application.id,
+          role: targetRole,
         },
+      });
+    } else if (existing.role !== targetRole) {
+      await prisma.userApplication.update({
+        where: { id: existing.id },
+        data: { role: targetRole },
       });
     }
   } else {
@@ -54,5 +64,5 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, allowed, username, clientId });
+  return NextResponse.json({ ok: true, allowed, role: targetRole, username, clientId });
 }
