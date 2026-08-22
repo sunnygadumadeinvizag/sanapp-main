@@ -27,6 +27,7 @@ model Application {
   createdAt    DateTime         @default(now())
   grants       UserApplication[]
   issues       TechnicalIssue[]
+  notifications AppNotification[]
 }
 
 // Technical issues raised by portal users against a specific application
@@ -79,4 +80,28 @@ model UserApplication {
   grantedAt     DateTime    @default(now())
 
   @@unique([userId, applicationId])
+}
+
+// ------------------------------------------------------------------
+// Central notifications — pushed by every application to Main.
+// The header bell in every app shows these grouped by application;
+// each app's "App Notifications" page shows only its own.
+// ------------------------------------------------------------------
+model AppNotification {
+  id          String      @id @default(uuid())
+  // The application that pushed this notification (Application.clientId).
+  appClientId String
+  application Application @relation(fields: [appClientId], references: [clientId], onDelete: Cascade)
+  // Recipient: SSO username (matches the user registry / session identity).
+  username    String
+  title       String
+  body        String?
+  // Deep link into the pushing app (absolute URL, opens from anywhere).
+  href        String?
+  read        Boolean     @default(false)
+  readAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([username, read, createdAt])
+  @@index([appClientId, username, read])
 }

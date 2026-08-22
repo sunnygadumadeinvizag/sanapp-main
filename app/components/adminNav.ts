@@ -3,10 +3,13 @@ import type { NavItem } from "sanapp-common-ui";
 /**
  * Sidebar for the "user" area of the portal. The home page itself IS the My
  * Apps launcher (grouped by category, with favourites), so the sidebar is just
- * Home — account/platform links live in the header (profile + Apps menus).
+ * Home + App Notifications — account/platform links live in the header.
  */
-export function userNavItems(active?: "home"): NavItem[] {
-  return [{ label: "Home", href: "/", active: active === "home" }];
+export function userNavItems(active?: "home" | "notifications"): NavItem[] {
+  return [
+    { label: "Home", href: "/", active: active === "home" },
+    { label: "App Notifications", href: "/notifications", active: active === "notifications" },
+  ];
 }
 
 /**

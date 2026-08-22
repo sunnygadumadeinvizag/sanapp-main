@@ -21,7 +21,7 @@ async function main() {
       name: "Leave Management",
       description: "Independent application #2 — own database (sanapp_app2_db), own roles",
       category: "ESTB",
-      url: process.env.APP2_PUBLIC_URL ?? "http://localhost:3003",
+      url: process.env.APP2_PUBLIC_URL ?? "http://localhost:3003/app2",
       openInNewTab: true,
     },
     {
@@ -29,7 +29,7 @@ async function main() {
       name: "PhD ERP",
       description: "Independent application #3 — own database (sanapp_app3_db), own roles",
       category: "Academic",
-      url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004",
+      url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004/app3",
       openInNewTab: true,
     },
     {
@@ -37,7 +37,7 @@ async function main() {
       name: "Facilities Booking",
       description: "Independent application #4 — building and slot booking (own database sanapp_facilities_db, own roles)",
       category: "Admin",
-      url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005",
+      url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005/facilities",
       openInNewTab: true,
     },
     {
@@ -45,7 +45,7 @@ async function main() {
       name: "Log Request",
       description: "Independent application #5 — request tracking (own database sanapp_logrequest_db, own roles)",
       category: "IT Services",
-      url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006",
+      url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006/logrequest",
       openInNewTab: false,
     },
     {
@@ -53,7 +53,7 @@ async function main() {
       name: "Inventory & Asset Tracking",
       description: "Independent application #6 — asset tracking (inventory schema in sanapp_logrequest_db, own roles)",
       category: "IT Services",
-      url: process.env.APP6_PUBLIC_URL ?? "http://localhost:3007",
+      url: process.env.APP6_PUBLIC_URL ?? "http://localhost:3007/inventory",
       openInNewTab: false,
     },
   ];
