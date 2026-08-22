@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
-import { adminCrumb, adminNavItems } from "../../components/adminNav";
+import { adminCrumb, adminNavItems } from "../../../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
-import { MatrixNavTabs } from "../../components/MatrixNavTabs";
-import { AccessMatrixGrid } from "../../components/AccessMatrixGrid";
-import type { MatrixApp, MatrixGrant, MatrixUser, DepartmentOption } from "../../components/matrixTypes";
+import { MatrixNavTabs } from "../../../components/MatrixNavTabs";
+import { AccessMatrixInspector } from "../../../components/AccessMatrixInspector";
+import type { MatrixApp, MatrixGrant, MatrixUser } from "../../../components/matrixTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +30,10 @@ type SsoUserRaw = {
   isActive: boolean;
 };
 
-export default async function AppMatrixPage({
+export default async function AppMatrixInspectorPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; user?: string }>;
+  searchParams: Promise<{ error?: string; app?: string }>;
 }) {
   const params = await searchParams;
   const store = await cookies();
@@ -45,15 +45,8 @@ export default async function AppMatrixPage({
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
   if (!isSuperAdmin) redirect("/");
 
-  const [usersRes, deptRes] = await Promise.all([
-    fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, { cache: "no-store" }),
-    fetch(`${SSO_BASE_URL}/api/admin/departments?key=${SSO_ADMIN_KEY}`, { cache: "no-store" }),
-  ]);
-
+  const usersRes = await fetch(`${SSO_BASE_URL}/api/admin/users?key=${SSO_ADMIN_KEY}`, { cache: "no-store" });
   const ssoUsers: SsoUserRaw[] = usersRes.ok ? (await usersRes.json()).users : [];
-  const ssoDepartments: { id: string; name: string }[] = deptRes.ok
-    ? (await deptRes.json()).departments ?? []
-    : [];
 
   const applications = await prisma.application.findMany({
     orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -94,11 +87,6 @@ export default async function AppMatrixPage({
     clientId: g.application.clientId,
   }));
 
-  const departments: DepartmentOption[] = ssoDepartments.map((d) => ({
-    id: d.id,
-    name: d.name,
-  }));
-
   const navItems = getPlatformNav({
     launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
@@ -127,17 +115,17 @@ export default async function AppMatrixPage({
       sidebarItems={adminNavItems("matrix")}
     >
       <SessionGuard channel="sanapp-main-session" />
-      <Breadcrumb items={adminCrumb("App Matrix")} />
-      <h1 className="iipe-page-title">Application Access Matrix</h1>
+      <Breadcrumb items={adminCrumb("App Matrix - Inspector")} />
+      <h1 className="iipe-page-title">Application Access Inspector</h1>
       <p className="iipe-page-sub">
-        Central Level 1 Authorization — configure which users and roles are permitted to access each application.
+        Inspect coverage, view role-level breakdown statistics, and manage user access for each specific application.
       </p>
 
       {params.error && (
         <div className="iipe-alert danger">Sign-in error: {params.error}</div>
       )}
 
-      <MatrixNavTabs active="grid" />
+      <MatrixNavTabs active="inspector" />
 
       {ssoUsers.length === 0 ? (
         <div className="iipe-card">
@@ -146,12 +134,11 @@ export default async function AppMatrixPage({
           </div>
         </div>
       ) : (
-        <AccessMatrixGrid
+        <AccessMatrixInspector
           users={matrixUsers}
           applications={matrixApps}
           initialGrants={matrixGrants}
-          departments={departments}
-          focusUsername={params.user}
+          initialApp={params.app}
         />
       )}
     </PageShell>

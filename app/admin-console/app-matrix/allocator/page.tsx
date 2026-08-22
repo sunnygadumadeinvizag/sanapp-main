@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { apiPath, Breadcrumb, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
-import { adminCrumb, adminNavItems } from "../../components/adminNav";
+import { adminCrumb, adminNavItems } from "../../../components/adminNav";
 import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
-import { MatrixNavTabs } from "../../components/MatrixNavTabs";
-import { AccessMatrixGrid } from "../../components/AccessMatrixGrid";
-import type { MatrixApp, MatrixGrant, MatrixUser, DepartmentOption } from "../../components/matrixTypes";
+import { MatrixNavTabs } from "../../../components/MatrixNavTabs";
+import { AccessMatrixAllocator } from "../../../components/AccessMatrixAllocator";
+import type { MatrixApp, MatrixGrant, MatrixUser, DepartmentOption } from "../../../components/matrixTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +30,10 @@ type SsoUserRaw = {
   isActive: boolean;
 };
 
-export default async function AppMatrixPage({
+export default async function AppMatrixAllocatorPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; user?: string }>;
+  searchParams: Promise<{ error?: string; role?: string }>;
 }) {
   const params = await searchParams;
   const store = await cookies();
@@ -127,17 +127,17 @@ export default async function AppMatrixPage({
       sidebarItems={adminNavItems("matrix")}
     >
       <SessionGuard channel="sanapp-main-session" />
-      <Breadcrumb items={adminCrumb("App Matrix")} />
-      <h1 className="iipe-page-title">Application Access Matrix</h1>
+      <Breadcrumb items={adminCrumb("App Matrix - Allocator")} />
+      <h1 className="iipe-page-title">User &amp; Role App Allocator</h1>
       <p className="iipe-page-sub">
-        Central Level 1 Authorization — configure which users and roles are permitted to access each application.
+        Bulk allocate, revoke, or synchronize application access across entire roles or custom selected groups of users.
       </p>
 
       {params.error && (
         <div className="iipe-alert danger">Sign-in error: {params.error}</div>
       )}
 
-      <MatrixNavTabs active="grid" />
+      <MatrixNavTabs active="allocator" />
 
       {ssoUsers.length === 0 ? (
         <div className="iipe-card">
@@ -146,12 +146,12 @@ export default async function AppMatrixPage({
           </div>
         </div>
       ) : (
-        <AccessMatrixGrid
+        <AccessMatrixAllocator
           users={matrixUsers}
           applications={matrixApps}
           initialGrants={matrixGrants}
           departments={departments}
-          focusUsername={params.user}
+          initialRole={params.role}
         />
       )}
     </PageShell>
