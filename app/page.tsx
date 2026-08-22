@@ -46,6 +46,7 @@ export default async function DashboardPage({
     }));
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
     active: "home",

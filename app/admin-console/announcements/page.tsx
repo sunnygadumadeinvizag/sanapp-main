@@ -42,6 +42,7 @@ export default async function AnnouncementsPage() {
   }));
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });

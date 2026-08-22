@@ -11,7 +11,7 @@ async function main() {
     {
       clientId: "sanapp-wikidocs",
       name: "Wiki Docs",
-      description: "Institute documentation wiki — sections, guides and knowledge base (own database sanapp_wikidocs_db, own roles)",
+      description: "Institute knowledge base — guides, guidelines and documentation for staff and students.",
       category: "General",
       url: process.env.APP1_PUBLIC_URL ?? "http://localhost:3002/wikidocs",
       openInNewTab: false,
@@ -19,7 +19,7 @@ async function main() {
     {
       clientId: "sanapp-app2",
       name: "Leave Management",
-      description: "Independent application #2 — own database (sanapp_app2_db), own roles",
+      description: "Apply for leave and track approvals from your department and accounts officers.",
       category: "ESTB",
       url: process.env.APP2_PUBLIC_URL ?? "http://localhost:3003/app2",
       openInNewTab: true,
@@ -27,7 +27,7 @@ async function main() {
     {
       clientId: "sanapp-app3",
       name: "PhD ERP",
-      description: "Independent application #3 — own database (sanapp_app3_db), own roles",
+      description: "PhD programme management — scholar records, thesis submission and progress reviews.",
       category: "Academic",
       url: process.env.APP3_PUBLIC_URL ?? "http://localhost:3004/app3",
       openInNewTab: true,
@@ -35,7 +35,7 @@ async function main() {
     {
       clientId: "sanapp-facilities",
       name: "Facilities Booking",
-      description: "Independent application #4 — building and slot booking (own database sanapp_facilities_db, own roles)",
+      description: "Book institute facilities — seminar halls, rooms and equipment with live calendar availability.",
       category: "Admin",
       url: process.env.APP4_PUBLIC_URL ?? "http://localhost:3005/facilities",
       openInNewTab: true,
@@ -43,7 +43,7 @@ async function main() {
     {
       clientId: "sanapp-logrequest",
       name: "Log Request",
-      description: "Independent application #5 — request tracking (own database sanapp_logrequest_db, own roles)",
+      description: "Raise and track service requests — IT, maintenance and campus support, handled by the right POCs.",
       category: "IT Services",
       url: process.env.APP5_PUBLIC_URL ?? "http://localhost:3006/logrequest",
       openInNewTab: false,
@@ -51,7 +51,7 @@ async function main() {
     {
       clientId: "sanapp-inventory",
       name: "Inventory & Asset Tracking",
-      description: "Independent application #6 — asset tracking (inventory schema in sanapp_logrequest_db, own roles)",
+      description: "Track institute assets — assignments, repairs, licenses and stock movements.",
       category: "IT Services",
       url: process.env.APP6_PUBLIC_URL ?? "http://localhost:3007/inventory",
       openInNewTab: false,

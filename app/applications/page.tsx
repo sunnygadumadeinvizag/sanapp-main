@@ -20,6 +20,7 @@ export default async function ApplicationsPage() {
   });
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
     active: "applications",

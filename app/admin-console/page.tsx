@@ -68,6 +68,7 @@ export default async function AdminConsolePage() {
   if (!isSuperAdmin) redirect("/");
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });

@@ -133,6 +133,7 @@ export default async function UsersPage() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });

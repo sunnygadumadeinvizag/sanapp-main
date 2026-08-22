@@ -41,6 +41,7 @@ export default async function NotFoundPage() {
       appName="Main"
       header={{
         navItems: getPlatformNav({
+    launcher: true,
           mainBaseUrl: MAIN_BASE_URL,
           ssoBaseUrl: SSO_BASE_URL,
           active: "home",

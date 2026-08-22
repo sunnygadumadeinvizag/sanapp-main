@@ -16,6 +16,7 @@ export default async function ThemePage() {
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
   const navItems = getPlatformNav({
+    launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
     ssoBaseUrl: SSO_BASE_URL,
   });
