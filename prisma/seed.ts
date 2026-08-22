@@ -95,6 +95,7 @@ async function main() {
     { username: "sanyasi", clientId: "sanapp-app3" },
     { username: "lakshmi", clientId: "sanapp-wikidocs" },
     { username: "admin", clientId: "sanapp-wikidocs" },
+    { username: "admin", clientId: "sanapp-app2" },
     { username: "admin", clientId: "sanapp-app3" },
     { username: "ramesh", clientId: "sanapp-wikidocs" },
     { username: "ramesh", clientId: "sanapp-app2" },
