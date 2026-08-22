@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { apiPath } from "sanapp-common-ui";
 
 export function MatrixNavTabs({
   active,
@@ -18,7 +17,7 @@ export function MatrixNavTabs({
       }}
     >
       <Link
-        href={apiPath("/admin-console/app-matrix")}
+        href="/admin-console/app-matrix"
         style={{
           padding: "10px 18px",
           fontSize: "0.95rem",
@@ -39,7 +38,7 @@ export function MatrixNavTabs({
       </Link>
 
       <Link
-        href={apiPath("/admin-console/app-matrix/allocator")}
+        href="/admin-console/app-matrix/allocator"
         style={{
           padding: "10px 18px",
           fontSize: "0.95rem",
@@ -60,7 +59,7 @@ export function MatrixNavTabs({
       </Link>
 
       <Link
-        href={apiPath("/admin-console/app-matrix/inspector")}
+        href="/admin-console/app-matrix/inspector"
         style={{
           padding: "10px 18px",
           fontSize: "0.95rem",
