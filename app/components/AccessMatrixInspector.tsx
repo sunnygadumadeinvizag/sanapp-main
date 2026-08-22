@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { apiPath } from "sanapp-common-ui";
 import {
   MatrixUser,
@@ -26,12 +26,31 @@ export function AccessMatrixInspector({
   const [batchBusy, setBatchBusy] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "danger" | "info"; message: string } | null>(null);
 
-  // Inspected app selection
-  const [inspectedAppClientId, setInspectedAppClientId] = useState<string>(
-    initialApp && applications.some((a) => a.clientId === initialApp)
-      ? initialApp
-      : applications[0]?.clientId ?? ""
-  );
+  // Helper to resolve client ID from initialApp prop (can be clientId or id)
+  const initialClientId = useMemo(() => {
+    if (!initialApp) return applications[0]?.clientId ?? "";
+    const match = applications.find((a) => a.clientId === initialApp || a.id === initialApp);
+    return match ? match.clientId : (applications[0]?.clientId ?? "");
+  }, [initialApp, applications]);
+
+  // Inspected app selection state
+  const [inspectedAppClientId, setInspectedAppClientId] = useState<string>(initialClientId);
+
+  // Sync state if initialClientId changes
+  useEffect(() => {
+    if (initialClientId) {
+      setInspectedAppClientId(initialClientId);
+    }
+  }, [initialClientId]);
+
+  function handleSelectApp(clientId: string) {
+    setInspectedAppClientId(clientId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("app", clientId);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
 
   // Search & filter within inspector
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -49,7 +68,9 @@ export function AccessMatrixInspector({
   }
 
   // Active inspected app
-  const inspectedApp = applications.find((a) => a.clientId === inspectedAppClientId) || applications[0];
+  const inspectedApp = useMemo(() => {
+    return applications.find((a) => a.clientId === inspectedAppClientId || a.id === inspectedAppClientId) || applications[0];
+  }, [applications, inspectedAppClientId]);
 
   const inspectedAppStats = useMemo(() => {
     if (!inspectedApp) return { total: 0, admins: 0, regular: 0 };
@@ -187,11 +208,30 @@ export function AccessMatrixInspector({
         </div>
       )}
 
-      {/* Application Selector Pills */}
+      {/* Application Selector */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--iipe-muted)", marginBottom: 8 }}>
-          Select Application to Inspect:
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+          <div style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--iipe-muted)" }}>
+            Select Application to Inspect:
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Quick Dropdown:</span>
+            <select
+              className="iipe-select"
+              value={inspectedApp.clientId}
+              onChange={(e) => handleSelectApp(e.target.value)}
+              style={{ height: 32, fontSize: "0.85rem", fontWeight: 600 }}
+            >
+              {applications.map((app) => (
+                <option key={app.clientId} value={app.clientId}>
+                  {app.name} ({users.filter((u) => getGrantRole(u.username, app.clientId) !== null).length} users)
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        {/* Application Selector Pills */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {applications.map((app) => {
             const isCurrent = app.clientId === inspectedApp.clientId;
@@ -201,7 +241,7 @@ export function AccessMatrixInspector({
               <button
                 key={app.clientId}
                 type="button"
-                onClick={() => setInspectedAppClientId(app.clientId)}
+                onClick={() => handleSelectApp(app.clientId)}
                 style={{
                   padding: "8px 16px",
                   borderRadius: "var(--iipe-radius)",
@@ -215,9 +255,10 @@ export function AccessMatrixInspector({
                   gap: 8,
                 }}
               >
-                <span>{app.name}</span>
+                <span style={{ pointerEvents: "none" }}>{app.name}</span>
                 <span
                   style={{
+                    pointerEvents: "none",
                     background: isCurrent ? "rgba(255,255,255,0.25)" : "var(--iipe-bg)",
                     color: isCurrent ? "#fff" : "var(--iipe-muted)",
                     padding: "1px 6px",
@@ -486,7 +527,7 @@ export function AccessMatrixInspector({
                             ✓ User
                           </span>
                         ) : (
-                          <span className="iipe-badge" style={{ fontSize: "0.72rem", color: "var(--iipe-muted)" }}>
+                          <span className="iipe-badge" style={{ fontSize: "0.75rem", color: "var(--iipe-muted)" }}>
                             No Access
                           </span>
                         )}
