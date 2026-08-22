@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { appUrl, readFavourites, toggleFavourite } from "sanapp-common-ui";
+import { appUrl, FAVOURITES_EVENT, readFavourites, toggleFavourite } from "sanapp-common-ui";
 
 export type MyAppEntry = {
   id: string;
@@ -88,6 +88,19 @@ export function MyAppsView({
   const [herePath, setHerePath] = useState<string | null>(() => normPath(currentPath));
   useEffect(() => {
     setFavs(readFavourites());
+    // Live-sync with stars toggled in the header Apps dropdown (and other tabs).
+    const refresh = () => setFavs(readFavourites());
+    window.addEventListener(FAVOURITES_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(FAVOURITES_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  // Which app the user is currently in (fallback for arrivals via the Apps
+  // menu / profile dropdown / direct navigation).
+  useEffect(() => {
     if (herePath) return;
     try {
       setHerePath(urlPath(document.referrer));
