@@ -7,6 +7,7 @@ type SmtpConfig = {
   port: number;
   user: string;
   fromEmail: string;
+  fromName?: string;
   hasPassword: boolean;
 };
 
@@ -18,6 +19,7 @@ export function EmailSettingsManager() {
   const [port, setPort] = useState("587");
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
+  const [fromName, setFromName] = useState("IIPE Intranet");
   const [fromEmail, setFromEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,7 @@ export function EmailSettingsManager() {
         setHost(s.host);
         setPort(String(s.port));
         setUser(s.user);
+        setFromName(s.fromName || "IIPE Intranet");
         setFromEmail(s.fromEmail);
       })
       .catch(() => {});
@@ -68,6 +71,7 @@ export function EmailSettingsManager() {
           host: host.trim(),
           port: p,
           user: user.trim(),
+          fromName: fromName.trim() || "IIPE Intranet",
           fromEmail: fromEmail.trim(),
           password: password.trim(),
         }),
@@ -143,7 +147,19 @@ export function EmailSettingsManager() {
           />
         </label>
         <label className="iipe-field">
-          <span className="iipe-label">From email</span>
+          <span className="iipe-label">From sender name (display name)</span>
+          <input
+            className="iipe-input"
+            value={fromName}
+            onChange={(e) => setFromName(e.target.value)}
+            placeholder="IIPE Intranet"
+          />
+          <span className="iipe-muted" style={{ fontSize: "0.82rem", marginTop: 4, display: "block" }}>
+            The sender name recipients see in their inbox (e.g. &quot;IIPE Intranet&quot;).
+          </span>
+        </label>
+        <label className="iipe-field">
+          <span className="iipe-label">From email address</span>
           <input
             className="iipe-input"
             value={fromEmail}
