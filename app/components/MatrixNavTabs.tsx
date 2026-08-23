@@ -1,6 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import "../admin-console/app-matrix/matrix.css";
+
+const TABS: { key: "grid" | "allocator" | "inspector"; href: string; icon: string; label: string }[] = [
+  { key: "grid", href: "/admin-console/app-matrix", icon: "⊞", label: "Matrix Grid" },
+  { key: "allocator", href: "/admin-console/app-matrix/allocator", icon: "⚡", label: "Batch Allocator" },
+  { key: "inspector", href: "/admin-console/app-matrix/inspector", icon: "🔍", label: "App Inspector" },
+];
 
 export function MatrixNavTabs({
   active,
@@ -8,76 +15,17 @@ export function MatrixNavTabs({
   active: "grid" | "allocator" | "inspector";
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        borderBottom: "2px solid var(--iipe-border)",
-        marginBottom: 20,
-      }}
-    >
-      <Link
-        href="/admin-console/app-matrix"
-        style={{
-          padding: "10px 18px",
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          background: "none",
-          border: "none",
-          borderBottom: active === "grid" ? "3px solid var(--iipe-primary)" : "3px solid transparent",
-          color: active === "grid" ? "var(--iipe-primary)" : "var(--iipe-muted)",
-          marginBottom: -2,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          textDecoration: "none",
-        }}
-      >
-        <span>⊞</span> Access Matrix (Grid View)
-      </Link>
-
-      <Link
-        href="/admin-console/app-matrix/allocator"
-        style={{
-          padding: "10px 18px",
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          background: "none",
-          border: "none",
-          borderBottom: active === "allocator" ? "3px solid var(--iipe-primary)" : "3px solid transparent",
-          color: active === "allocator" ? "var(--iipe-primary)" : "var(--iipe-muted)",
-          marginBottom: -2,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          textDecoration: "none",
-        }}
-      >
-        <span>⚡</span> User &amp; Role Allocator (Batch)
-      </Link>
-
-      <Link
-        href="/admin-console/app-matrix/inspector"
-        style={{
-          padding: "10px 18px",
-          fontSize: "0.95rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          background: "none",
-          border: "none",
-          borderBottom: active === "inspector" ? "3px solid var(--iipe-primary)" : "3px solid transparent",
-          color: active === "inspector" ? "var(--iipe-primary)" : "var(--iipe-muted)",
-          marginBottom: -2,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          textDecoration: "none",
-        }}
-      >
-        <span>🔍</span> App Access Inspector
-      </Link>
-    </div>
+    <nav className="mx-tabs" aria-label="App Matrix views">
+      {TABS.map((t) => (
+        <Link
+          key={t.key}
+          href={t.href}
+          className={`mx-tab${active === t.key ? " active" : ""}`}
+          aria-current={active === t.key ? "page" : undefined}
+        >
+          <span aria-hidden>{t.icon}</span> {t.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

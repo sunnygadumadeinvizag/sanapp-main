@@ -12,13 +12,13 @@ import { verifyMainSession } from "@/lib/session";
  */
 export async function POST(request: NextRequest) {
   const store = await cookies();
-  const session = store.get("main_session")?.value;
+  const session = store.get("main_session")?.value || request.cookies.get("main_session")?.value;
   if (!session) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "unauthorized: main_session cookie missing" }, { status: 401 });
   }
   const me = await verifyMainSession(session);
   if (!me || me.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "forbidden: superadmin role required" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -31,25 +31,30 @@ export async function POST(request: NextRequest) {
   };
 
   const apps = await prisma.application.findMany();
-  const appByClientId = new Map(apps.map((a) => [a.clientId, a.id]));
+  const appByClientId = new Map<string, string>();
+  for (const a of apps) {
+    appByClientId.set(a.clientId.toLowerCase(), a.id);
+    appByClientId.set(a.id.toLowerCase(), a.id);
+  }
   const defaultRole = role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
 
   if (Array.isArray(operations) && operations.length > 0) {
     await prisma.$transaction(async (tx) => {
       for (const op of operations) {
-        const appId = appByClientId.get(op.clientId);
+        const appId = appByClientId.get(op.clientId.toLowerCase());
         if (!appId) continue;
+        const cleanUsername = op.username.trim().toLowerCase();
 
         if (op.allowed) {
           const opRole = op.role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
           const existing = await tx.userApplication.findFirst({
-            where: { username: op.username, applicationId: appId },
+            where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
           });
           if (!existing) {
             await tx.userApplication.create({
               data: {
                 userId: op.userId ?? null,
-                username: op.username,
+                username: cleanUsername,
                 applicationId: appId,
                 role: opRole,
               },
@@ -57,12 +62,12 @@ export async function POST(request: NextRequest) {
           } else {
             await tx.userApplication.update({
               where: { id: existing.id },
-              data: { role: opRole },
+              data: { role: opRole, userId: op.userId ?? existing.userId },
             });
           }
         } else {
           await tx.userApplication.deleteMany({
-            where: { username: op.username, applicationId: appId },
+            where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
           });
         }
       }
@@ -74,7 +79,7 @@ export async function POST(request: NextRequest) {
   if (action && Array.isArray(users) && users.length > 0 && Array.isArray(clientIds)) {
     const targetAppIds: string[] = [];
     for (const cid of clientIds) {
-      const appId = appByClientId.get(cid);
+      const appId = appByClientId.get(cid.toLowerCase());
       if (appId) targetAppIds.push(appId);
     }
 
@@ -82,20 +87,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No valid applications specified" }, { status: 400 });
     }
 
-    const usernames = users.map((u) => u.username);
+    const usernames = users.map((u) => u.username.trim().toLowerCase());
 
     await prisma.$transaction(async (tx) => {
       if (action === "grant" || action === "set_role") {
         for (const user of users) {
+          const cleanUsername = user.username.trim().toLowerCase();
           for (const appId of targetAppIds) {
             const existing = await tx.userApplication.findFirst({
-              where: { username: user.username, applicationId: appId },
+              where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
             });
             if (!existing) {
               await tx.userApplication.create({
                 data: {
                   userId: user.userId ?? null,
-                  username: user.username,
+                  username: cleanUsername,
                   applicationId: appId,
                   role: defaultRole,
                 },
@@ -103,7 +109,7 @@ export async function POST(request: NextRequest) {
             } else {
               await tx.userApplication.update({
                 where: { id: existing.id },
-                data: { role: defaultRole },
+                data: { role: defaultRole, userId: user.userId ?? existing.userId },
               });
             }
           }
@@ -111,22 +117,23 @@ export async function POST(request: NextRequest) {
       } else if (action === "revoke") {
         await tx.userApplication.deleteMany({
           where: {
-            username: { in: usernames },
+            username: { in: usernames, mode: "insensitive" },
             applicationId: { in: targetAppIds },
           },
         });
       } else if (action === "set_exact") {
         await tx.userApplication.deleteMany({
           where: {
-            username: { in: usernames },
+            username: { in: usernames, mode: "insensitive" },
           },
         });
         for (const user of users) {
+          const cleanUsername = user.username.trim().toLowerCase();
           for (const appId of targetAppIds) {
             await tx.userApplication.create({
               data: {
                 userId: user.userId ?? null,
-                username: user.username,
+                username: cleanUsername,
                 applicationId: appId,
                 role: defaultRole,
               },

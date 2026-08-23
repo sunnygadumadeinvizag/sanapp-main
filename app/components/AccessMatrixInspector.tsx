@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { apiPath } from "sanapp-common-ui";
 import {
   MatrixUser,
@@ -9,6 +10,7 @@ import {
   PRIMARY_ROLES,
   getRoleLabel,
 } from "./matrixTypes";
+import "../admin-console/app-matrix/matrix.css";
 
 export function AccessMatrixInspector({
   users,
@@ -26,31 +28,15 @@ export function AccessMatrixInspector({
   const [batchBusy, setBatchBusy] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "danger" | "info"; message: string } | null>(null);
 
-  // Helper to resolve client ID from initialApp prop (can be clientId or id)
-  const initialClientId = useMemo(() => {
-    if (!initialApp) return applications[0]?.clientId ?? "";
-    const match = applications.find((a) => a.clientId === initialApp || a.id === initialApp);
-    return match ? match.clientId : (applications[0]?.clientId ?? "");
-  }, [initialApp, applications]);
-
-  // Inspected app selection state
-  const [inspectedAppClientId, setInspectedAppClientId] = useState<string>(initialClientId);
-
-  // Sync state if initialClientId changes
-  useEffect(() => {
-    if (initialClientId) {
-      setInspectedAppClientId(initialClientId);
-    }
-  }, [initialClientId]);
-
-  function handleSelectApp(clientId: string) {
-    setInspectedAppClientId(clientId);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("app", clientId);
-      window.history.replaceState(null, "", url.toString());
-    }
-  }
+  // Active inspected app — first registered app by default
+  const inspectedApp = useMemo(() => {
+    const match = applications.find(
+      (a) =>
+        a.clientId.toLowerCase() === (initialApp ?? "").toLowerCase() ||
+        a.id.toLowerCase() === (initialApp ?? "").toLowerCase()
+    );
+    return match ?? applications[0];
+  }, [applications, initialApp]);
 
   // Search & filter within inspector
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -59,18 +45,35 @@ export function AccessMatrixInspector({
 
   const grantMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const g of grants) map.set(`${g.username}:${g.clientId}`, g.role || "USER");
+    for (const g of grants) {
+      if (g.username && g.clientId) {
+        map.set(`${g.username.toLowerCase().trim()}:${g.clientId.toLowerCase().trim()}`, g.role || "USER");
+      }
+    }
     return map;
   }, [grants]);
 
   function getGrantRole(username: string, clientId: string): string | null {
-    return grantMap.get(`${username}:${clientId}`) ?? null;
+    if (!username || !clientId) return null;
+    return grantMap.get(`${username.toLowerCase().trim()}:${clientId.toLowerCase().trim()}`) ?? null;
   }
 
-  // Active inspected app
-  const inspectedApp = useMemo(() => {
-    return applications.find((a) => a.clientId === inspectedAppClientId || a.id === inspectedAppClientId) || applications[0];
-  }, [applications, inspectedAppClientId]);
+  const appCounts = useMemo(() => {
+    const totals = new Map<string, number>();
+    const admins = new Map<string, number>();
+    for (const a of applications) {
+      totals.set(a.clientId, 0);
+      admins.set(a.clientId, 0);
+    }
+    for (const u of users) {
+      for (const a of applications) {
+        const r = getGrantRole(u.username, a.clientId);
+        if (r) totals.set(a.clientId, (totals.get(a.clientId) ?? 0) + 1);
+        if (r === "APP_ADMIN") admins.set(a.clientId, (admins.get(a.clientId) ?? 0) + 1);
+      }
+    }
+    return { totals, admins };
+  }, [users, applications, grantMap]);
 
   const inspectedAppStats = useMemo(() => {
     if (!inspectedApp) return { total: 0, admins: 0, regular: 0 };
@@ -86,21 +89,28 @@ export function AccessMatrixInspector({
 
   // Toggle single user
   async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
-    const key = `${user.username}:${app.clientId}`;
+    const key = `${user.username.toLowerCase().trim()}:${app.clientId.toLowerCase().trim()}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
 
     const oldGrants = [...grants];
 
     setGrants((prev) => {
-      const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
+      const uLower = user.username.toLowerCase().trim();
+      const cLower = app.clientId.toLowerCase().trim();
+      const rest = prev.filter(
+        (g) => !(g.clientId.toLowerCase().trim() === cLower && g.username.toLowerCase().trim() === uLower)
+      );
+      return checked
+        ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }]
+        : rest;
     });
 
     try {
       const res = await fetch(apiPath("/api/grants"), {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           userId: user.id,
           username: user.username,
@@ -109,10 +119,17 @@ export function AccessMatrixInspector({
           role,
         }),
       });
-      if (!res.ok) throw new Error("Request failed");
-    } catch {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setFeedback({
+        type: "success",
+        message: `${checked ? (role === "APP_ADMIN" ? "⭐ Granted App Admin to" : "✓ Granted access to") : "Revoked access for"} ${user.name} (@${user.username}) on ${app.name}.`,
+      });
+    } catch (err: any) {
       setGrants(oldGrants);
-      setFeedback({ type: "danger", message: `Failed to update access for @${user.username}` });
+      setFeedback({ type: "danger", message: `Failed to update access for @${user.username}: ${err.message || err}` });
     } finally {
       setBusyKeys((prev) => {
         const next = new Set(prev);
@@ -137,6 +154,7 @@ export function AccessMatrixInspector({
       const res = await fetch(apiPath("/api/grants/batch"), {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           action: grant ? "grant" : "revoke",
           role,
@@ -144,11 +162,17 @@ export function AccessMatrixInspector({
           clientIds: [clientId],
         }),
       });
-      if (!res.ok) throw new Error("Group update failed");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
 
       setGrants((prev) => {
-        const usernames = new Set(userList.map((u) => u.username));
-        let updated = prev.filter((g) => !(usernames.has(g.username) && g.clientId === clientId));
+        const uSet = new Set(userList.map((u) => u.username.toLowerCase().trim()));
+        const cLower = clientId.toLowerCase().trim();
+        let updated = prev.filter(
+          (g) => !(uSet.has(g.username.toLowerCase().trim()) && g.clientId.toLowerCase().trim() === cLower)
+        );
         if (grant) {
           for (const u of userList) {
             updated.push({ userId: u.id, username: u.username, clientId, role });
@@ -161,8 +185,8 @@ export function AccessMatrixInspector({
         type: "success",
         message: `${grant ? `Granted (${role === "APP_ADMIN" ? "App Admin" : "User"})` : "Revoked"} ${inspectedApp?.name} for all ${userList.length} members of "${groupName}".`,
       });
-    } catch {
-      setFeedback({ type: "danger", message: `Failed to update ${groupName}. Please try again.` });
+    } catch (err: any) {
+      setFeedback({ type: "danger", message: `Failed to update ${groupName}: ${err.message || err}` });
     } finally {
       setBatchBusy(false);
     }
@@ -197,156 +221,85 @@ export function AccessMatrixInspector({
   }
 
   return (
-    <div>
+    <div className="mx-root">
       {/* Toast Feedback */}
       {feedback && (
-        <div className={`iipe-alert ${feedback.type}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div className={`iipe-alert ${feedback.type} mx-toast`} role="status">
           <span>{feedback.message}</span>
-          <button type="button" className="iipe-btn secondary" style={{ padding: "2px 8px", fontSize: "0.8rem", marginLeft: 12 }} onClick={() => setFeedback(null)}>
+          <button type="button" className="iipe-btn secondary" aria-label="Dismiss" onClick={() => setFeedback(null)}>
             ✕
           </button>
         </div>
       )}
 
-      {/* Application Selector */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--iipe-muted)" }}>
-            Select Application to Inspect:
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Quick Dropdown:</span>
-            <select
-              className="iipe-select"
-              value={inspectedApp.clientId}
-              onChange={(e) => handleSelectApp(e.target.value)}
-              style={{ height: 32, fontSize: "0.85rem", fontWeight: 600 }}
-            >
-              {applications.map((app) => (
-                <option key={app.clientId} value={app.clientId}>
-                  {app.name} ({users.filter((u) => getGrantRole(u.username, app.clientId) !== null).length} users)
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Application Selector Pills */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {/* Application selector strip */}
+      <div>
+        <div className="mx-card-title" style={{ marginBottom: 8 }}>Application</div>
+        <div className="mx-app-strip" role="tablist" aria-label="Select application to inspect">
           {applications.map((app) => {
             const isCurrent = app.clientId === inspectedApp.clientId;
-            const count = users.filter((u) => getGrantRole(u.username, app.clientId) !== null).length;
-            const adminCount = users.filter((u) => getGrantRole(u.username, app.clientId) === "APP_ADMIN").length;
+            const count = appCounts.totals.get(app.clientId) ?? 0;
+            const adminCount = appCounts.admins.get(app.clientId) ?? 0;
             return (
-              <button
+              <Link
                 key={app.clientId}
-                type="button"
-                onClick={() => handleSelectApp(app.clientId)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "var(--iipe-radius)",
-                  border: isCurrent ? "2px solid var(--iipe-primary)" : "1px solid var(--iipe-border)",
-                  background: isCurrent ? "var(--iipe-primary)" : "var(--iipe-surface)",
-                  color: isCurrent ? "#fff" : "var(--iipe-text)",
-                  cursor: "pointer",
-                  fontWeight: isCurrent ? 700 : 500,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
+                href={`/admin-console/app-matrix/inspector?app=${app.clientId}`}
+                className={`mx-app-pill${isCurrent ? " active" : ""}`}
+                aria-current={isCurrent ? "page" : undefined}
               >
-                <span style={{ pointerEvents: "none" }}>{app.name}</span>
-                <span
-                  style={{
-                    pointerEvents: "none",
-                    background: isCurrent ? "rgba(255,255,255,0.25)" : "var(--iipe-bg)",
-                    color: isCurrent ? "#fff" : "var(--iipe-muted)",
-                    padding: "1px 6px",
-                    borderRadius: 999,
-                    fontSize: "0.75rem",
-                  }}
-                >
-                  {count} {adminCount > 0 && `(★${adminCount})`}
+                <span>{app.name}</span>
+                <span className="mx-app-pill-count">
+                  {count}
+                  {adminCount > 0 && <span className="star" title={`${adminCount} app admin(s)`}>★{adminCount}</span>}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </div>
       </div>
 
-      {/* Application Overview Card */}
-      <div
-        style={{
-          background: "var(--iipe-surface)",
-          border: "1px solid var(--iipe-border)",
-          borderRadius: "var(--iipe-radius)",
-          padding: "20px",
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <h2 style={{ margin: 0 }}>{inspectedApp.name}</h2>
-              <span className="iipe-badge" style={{ fontSize: "0.8rem" }}>Category: {inspectedApp.category}</span>
+      {/* Application Overview */}
+      <div className="mx-card">
+        <div className="mx-overview">
+          <div className="mx-overview-id">
+            <h2>
+              {inspectedApp.name}
+              <span className="iipe-badge">{inspectedApp.category}</span>
               {inspectedApp.enabled ? (
-                <span className="iipe-badge accent" style={{ fontSize: "0.8rem" }}>Active</span>
+                <span className="iipe-badge accent">Active</span>
               ) : (
-                <span className="iipe-badge danger" style={{ fontSize: "0.8rem" }}>Disabled</span>
+                <span className="iipe-badge danger">Disabled</span>
               )}
+            </h2>
+            <div className="mx-overview-meta">
+              <span><code>{inspectedApp.clientId}</code></span>
+              <span>
+                <a href={inspectedApp.url} target="_blank" rel="noreferrer">{inspectedApp.url} ↗</a>
+              </span>
             </div>
-            <div className="iipe-muted" style={{ marginTop: 4, fontSize: "0.88rem" }}>
-              Client ID: <code>{inspectedApp.clientId}</code> • URL:{" "}
-              <a href={inspectedApp.url} target="_blank" rel="noreferrer">
-                {inspectedApp.url} ↗
-              </a>
-            </div>
-            {inspectedApp.description && (
-              <p style={{ marginTop: 8, marginBottom: 0, fontSize: "0.9rem" }}>{inspectedApp.description}</p>
-            )}
+            {inspectedApp.description && <div className="mx-overview-meta"><span>{inspectedApp.description}</span></div>}
           </div>
 
-          <div style={{ display: "flex", gap: 12 }}>
-            <div
-              style={{
-                textAlign: "center",
-                padding: "12px 20px",
-                background: "var(--iipe-primary-light)",
-                borderRadius: "var(--iipe-radius)",
-              }}
-            >
-              <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--iipe-primary-dark)" }}>
-                {inspectedAppStats.total}{" "}
-                <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>/ {users.length}</span>
-              </div>
-              <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--iipe-primary-dark)", textTransform: "uppercase" }}>
-                Total Access ({Math.round((inspectedAppStats.total / (users.length || 1)) * 100)}%)
-              </div>
+          <div className="mx-stats">
+            <div className="mx-stat">
+              <strong>{inspectedAppStats.total}</strong>
+              <span>of {users.length} users</span>
             </div>
-
-            <div
-              style={{
-                textAlign: "center",
-                padding: "12px 20px",
-                background: "color-mix(in srgb, var(--iipe-accent) 20%, transparent)",
-                borderRadius: "var(--iipe-radius)",
-                border: "1px solid #d9a441",
-              }}
-            >
-              <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1c2b28" }}>
-                {inspectedAppStats.admins}
-              </div>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#1c2b28", textTransform: "uppercase" }}>
-                ⭐ App Admins
-              </div>
+            <div className="mx-stat">
+              <strong>{inspectedAppStats.regular}</strong>
+              <span>regular</span>
+            </div>
+            <div className="mx-stat accent">
+              <strong>{inspectedAppStats.admins}</strong>
+              <span>⭐ admins</span>
             </div>
           </div>
         </div>
 
         {/* Role-Wise Access Breakdown */}
-        <div style={{ marginTop: 24, borderTop: "1px solid var(--iipe-border)", paddingTop: 16 }}>
-          <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>Role-Level Access &amp; Bulk Allocation</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--iipe-border)" }}>
+          <h3 className="mx-card-title">Role-Level Access &amp; Bulk Allocation</h3>
+          <div className="mx-role-rows">
             {PRIMARY_ROLES.map((pr) => {
               const roleUsers = users.filter((u) => u.primaryRole === pr.value);
               const grantedRoleUsers = roleUsers.filter((u) => getGrantRole(u.username, inspectedApp.clientId) !== null);
@@ -354,66 +307,35 @@ export function AccessMatrixInspector({
               const allGranted = roleUsers.length > 0 && grantedRoleUsers.length === roleUsers.length;
 
               return (
-                <div
-                  key={pr.value}
-                  style={{
-                    border: "1px solid var(--iipe-border)",
-                    borderRadius: "var(--iipe-radius)",
-                    padding: "12px 14px",
-                    background: "var(--iipe-bg)",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>{pr.label}</div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: 700 }}>
-                      {grantedRoleUsers.length} / {roleUsers.length} ({percentage}%)
-                    </div>
+                <div key={pr.value} className="mx-role-row">
+                  <div className="mx-role-name">
+                    {pr.label}
+                    <small>{grantedRoleUsers.length} / {roleUsers.length} granted ({percentage}%)</small>
                   </div>
-
-                  <div
-                    style={{
-                      width: "100%",
-                      height: 6,
-                      background: "var(--iipe-border)",
-                      borderRadius: 3,
-                      overflow: "hidden",
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${percentage}%`,
-                        height: "100%",
-                        background: percentage === 100 ? "var(--iipe-success)" : "var(--iipe-primary)",
-                        transition: "width 0.3s ease",
-                      }}
-                    />
+                  <div className="mx-role-bar" role="img" aria-label={`${percentage}% granted`}>
+                    <div className={percentage === 100 ? "full" : undefined} style={{ width: `${percentage}%` }} />
                   </div>
-
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div className="mx-role-actions">
                     <button
                       type="button"
                       className="iipe-btn primary"
                       disabled={batchBusy || roleUsers.length === 0 || allGranted}
-                      style={{ padding: "3px 8px", fontSize: "0.74rem", flex: 1 }}
                       onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, true, pr.label, "USER")}
                     >
-                      + Grant Users
+                      + Users
                     </button>
                     <button
                       type="button"
-                      className="iipe-btn secondary"
+                      className="iipe-btn secondary mx-btn-admin"
                       disabled={batchBusy || roleUsers.length === 0}
-                      style={{ padding: "3px 8px", fontSize: "0.74rem", flex: 1 }}
                       onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, true, pr.label, "APP_ADMIN")}
                     >
-                      ⭐ Make Admins
+                      ⭐ Admins
                     </button>
                     <button
                       type="button"
                       className="iipe-btn danger"
                       disabled={batchBusy || grantedRoleUsers.length === 0}
-                      style={{ padding: "3px 8px", fontSize: "0.74rem" }}
                       onClick={() => executeGroupGrant(roleUsers, inspectedApp.clientId, false, pr.label)}
                     >
                       Revoke
@@ -427,66 +349,49 @@ export function AccessMatrixInspector({
       </div>
 
       {/* User Access List for this App */}
-      <div
-        style={{
-          background: "var(--iipe-surface)",
-          border: "1px solid var(--iipe-border)",
-          borderRadius: "var(--iipe-radius)",
-          padding: "16px",
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: "1rem" }}>
-            User Access List for {inspectedApp.name} ({displayedUsers.length} users shown)
-          </h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              type="text"
-              className="iipe-input"
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ height: 32, fontSize: "0.82rem", width: 180 }}
-            />
-            <select
-              className="iipe-select"
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              style={{ height: 32, fontSize: "0.82rem" }}
-            >
-              <option value="ALL">All Roles</option>
-              {PRIMARY_ROLES.map((pr) => (<option key={pr.value} value={pr.value}>{pr.label}</option>))}
-            </select>
-            <select
-              className="iipe-select"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              style={{ height: 32, fontSize: "0.82rem" }}
-            >
-              <option value="ALL">All Access Status</option>
-              <option value="ADMIN">⭐ App Admins Only</option>
-              <option value="USER">👤 Regular Users Only</option>
-              <option value="UNAUTHORIZED">No Access Only</option>
-            </select>
-          </div>
+      <div className="mx-card">
+        <div className="mx-filters">
+          <input
+            type="search"
+            className="iipe-input"
+            placeholder={`Search ${users.length} users…`}
+            aria-label="Search users"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <select className="iipe-select" aria-label="Filter by primary role" value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
+            <option value="ALL">All Roles</option>
+            {PRIMARY_ROLES.map((pr) => (<option key={pr.value} value={pr.value}>{pr.label}</option>))}
+          </select>
+          <select
+            className="iipe-select"
+            aria-label="Filter by access status"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+          >
+            <option value="ALL">All Access Status</option>
+            <option value="ADMIN">⭐ App Admins Only</option>
+            <option value="USER">👤 Regular Users Only</option>
+            <option value="UNAUTHORIZED">No Access Only</option>
+          </select>
         </div>
 
-        <div className="iipe-table-scroll" style={{ maxHeight: "50vh", overflowY: "auto" }}>
-          <table className="iipe-table" style={{ width: "100%" }}>
+        <div className="mx-table-wrap">
+          <table className="iipe-table mx-table">
             <thead>
               <tr>
-                <th>User</th>
+                <th className="mx-user-cell">User</th>
                 <th>Role</th>
                 <th>Department</th>
-                <th style={{ width: 150, textAlign: "center" }}>Access Status</th>
-                <th style={{ width: 220, textAlign: "center" }}>Actions</th>
+                <th className="mx-center">Access</th>
+                <th className="mx-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {displayedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: "24px" }}>
-                    <div className="iipe-muted">No users match the search and filter criteria.</div>
+                  <td colSpan={5} className="mx-center" style={{ padding: 24 }}>
+                    <span className="iipe-muted">No users match the search and filter criteria.</span>
                   </td>
                 </tr>
               ) : (
@@ -494,84 +399,63 @@ export function AccessMatrixInspector({
                   const role = getGrantRole(user.username, inspectedApp.clientId);
                   const isGranted = role !== null;
                   const isAppAdmin = role === "APP_ADMIN";
-                  const key = `${user.username}:${inspectedApp.clientId}`;
+                  const key = `${user.username.toLowerCase().trim()}:${inspectedApp.clientId.toLowerCase().trim()}`;
                   const isBusy = busyKeys.has(key) || batchBusy;
                   return (
-                    <tr
-                      key={user.id}
-                      style={{
-                        background: isAppAdmin
-                          ? "color-mix(in srgb, var(--iipe-accent) 12%, transparent)"
-                          : isGranted
-                          ? "color-mix(in srgb, var(--iipe-primary) 5%, transparent)"
-                          : undefined,
-                      }}
-                    >
-                      <td>
+                    <tr key={user.id}>
+                      <td className="mx-user-cell">
                         <strong>{user.name}</strong>
-                        <div className="iipe-muted" style={{ fontSize: "0.8rem" }}>@{user.username}</div>
+                        <div className="muted-line">@{user.username}</div>
                       </td>
                       <td>
-                        <span className="iipe-badge" style={{ fontSize: "0.72rem" }}>
-                          {getRoleLabel(user.primaryRole)}
-                        </span>
+                        <span className="iipe-badge">{getRoleLabel(user.primaryRole)}</span>
                       </td>
                       <td>{user.departmentName || "—"}</td>
-                      <td style={{ textAlign: "center" }}>
+                      <td className="mx-center">
                         {isAppAdmin ? (
-                          <span className="iipe-badge" style={{ fontSize: "0.75rem", fontWeight: 700, background: "#d9a441", color: "#1c2b28" }}>
-                            ⭐ App Admin
-                          </span>
+                          <span className="iipe-badge accent">⭐ Admin</span>
                         ) : isGranted ? (
-                          <span className="iipe-badge accent" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                            ✓ User
-                          </span>
+                          <span className="iipe-badge">✓ User</span>
                         ) : (
-                          <span className="iipe-badge" style={{ fontSize: "0.75rem", color: "var(--iipe-muted)" }}>
-                            No Access
-                          </span>
+                          <span className="iipe-muted">—</span>
                         )}
                       </td>
-                      <td style={{ textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                      <td className="mx-center">
+                        <div className="mx-actions">
                           {!isGranted ? (
                             <>
                               <button
                                 type="button"
                                 className="iipe-btn primary"
                                 disabled={isBusy || !inspectedApp.enabled}
-                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
                                 onClick={() => toggleSingle(user, inspectedApp, true, "USER")}
                               >
-                                + Grant User
+                                + User
                               </button>
                               <button
                                 type="button"
-                                className="iipe-btn secondary"
+                                className="iipe-btn secondary mx-btn-admin"
                                 disabled={isBusy || !inspectedApp.enabled}
-                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
                                 onClick={() => toggleSingle(user, inspectedApp, true, "APP_ADMIN")}
                               >
-                                ⭐ Grant Admin
+                                ⭐ Admin
                               </button>
                             </>
                           ) : (
                             <>
                               <button
                                 type="button"
-                                className="iipe-btn secondary"
+                                className={`iipe-btn secondary${isAppAdmin ? "" : " mx-btn-admin"}`}
                                 disabled={isBusy}
-                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
                                 onClick={() => toggleSingle(user, inspectedApp, true, isAppAdmin ? "USER" : "APP_ADMIN")}
                                 title={isAppAdmin ? "Demote to regular user" : "Promote to App Admin"}
                               >
-                                {isAppAdmin ? "Demote to User" : "⭐ Make Admin"}
+                                {isAppAdmin ? "↓ User" : "⭐ Admin"}
                               </button>
                               <button
                                 type="button"
                                 className="iipe-btn danger"
                                 disabled={isBusy}
-                                style={{ padding: "3px 8px", fontSize: "0.72rem" }}
                                 onClick={() => toggleSingle(user, inspectedApp, false)}
                               >
                                 Revoke
@@ -586,6 +470,9 @@ export function AccessMatrixInspector({
               )}
             </tbody>
           </table>
+        </div>
+        <div className="iipe-muted" style={{ marginTop: 8, fontSize: "0.8rem" }}>
+          Showing {displayedUsers.length} of {users.length} users
         </div>
       </div>
     </div>

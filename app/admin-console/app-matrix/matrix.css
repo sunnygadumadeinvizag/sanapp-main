@@ -1,0 +1,627 @@
+/* ============================================================
+   App Matrix — shared styles for the three matrix views
+   (grid, allocator, inspector). Class prefix: mx-
+   Responsive: single column + scroll strips on phones.
+   ============================================================ */
+
+.mx-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Let the matrix shrink inside the page shell even when children are wide */
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ---------- View tabs ---------- */
+.mx-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--iipe-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mx-tabs::-webkit-scrollbar {
+  display: none;
+}
+.mx-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--iipe-muted);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+.mx-tab:hover {
+  color: var(--iipe-primary);
+  text-decoration: none;
+}
+.mx-tab.active {
+  color: var(--iipe-primary);
+  border-bottom-color: var(--iipe-primary);
+}
+
+/* ---------- Feedback toast ---------- */
+.mx-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+/* ---------- Summary strip (replaces big metric tiles) ---------- */
+.mx-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  background: var(--iipe-surface);
+  border: 1px solid var(--iipe-border);
+  border-radius: var(--iipe-radius);
+  padding: 10px 16px;
+  font-size: 0.85rem;
+}
+.mx-summary-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--iipe-muted);
+  white-space: nowrap;
+}
+.mx-summary-item strong {
+  font-size: 1.05rem;
+  color: var(--iipe-text);
+}
+.mx-summary-item.accent strong {
+  color: var(--iipe-warning);
+}
+
+/* ---------- Cards ---------- */
+.mx-card {
+  background: var(--iipe-surface);
+  border: 1px solid var(--iipe-border);
+  border-radius: var(--iipe-radius);
+  padding: 16px;
+}
+.mx-card-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.mx-card-title small {
+  font-weight: 400;
+  color: var(--iipe-muted);
+}
+
+/* ---------- Filter bar ---------- */
+.mx-filters {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  align-items: center;
+}
+.mx-filters .iipe-input,
+.mx-filters .iipe-select {
+  height: 38px;
+}
+.mx-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--iipe-border);
+}
+.mx-filter-row .iipe-btn {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+/* ---------- App selector pills (inspector) ---------- */
+.mx-app-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.mx-app-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--iipe-border);
+  background: var(--iipe-surface);
+  color: var(--iipe-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.mx-app-pill:hover {
+  border-color: var(--iipe-primary);
+  text-decoration: none;
+}
+.mx-app-pill.active {
+  background: var(--iipe-primary);
+  border-color: var(--iipe-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.mx-app-pill-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--iipe-bg);
+  color: var(--iipe-muted);
+}
+.mx-app-pill.active .mx-app-pill-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.mx-app-pill-count .star {
+  color: var(--iipe-accent);
+}
+.mx-app-pill.active .mx-app-pill-count .star {
+  color: #fff;
+}
+
+/* ---------- Inspector overview ---------- */
+.mx-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+.mx-overview-id h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mx-overview-meta {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--iipe-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.mx-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mx-stat {
+  text-align: center;
+  padding: 8px 18px;
+  border-radius: var(--iipe-radius);
+  background: var(--iipe-primary-light);
+  min-width: 86px;
+}
+.mx-stat strong {
+  display: block;
+  font-size: 1.3rem;
+  line-height: 1.2;
+  color: var(--iipe-primary-dark);
+}
+.mx-stat span {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--iipe-primary-dark);
+}
+.mx-stat.accent {
+  background: var(--iipe-warning-light);
+}
+.mx-stat.accent strong,
+.mx-stat.accent span {
+  color: var(--iipe-warning);
+}
+
+/* ---------- Role allocation rows (inspector) ---------- */
+.mx-role-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mx-role-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--iipe-border);
+  border-radius: var(--iipe-radius);
+  background: var(--iipe-bg);
+}
+.mx-role-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.mx-role-name small {
+  display: block;
+  font-weight: 400;
+  color: var(--iipe-muted);
+  font-size: 0.74rem;
+}
+.mx-role-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--iipe-border);
+  overflow: hidden;
+}
+.mx-role-bar > div {
+  height: 100%;
+  background: var(--iipe-primary);
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+.mx-role-bar > div.full {
+  background: var(--iipe-success);
+}
+.mx-role-actions {
+  display: flex;
+  gap: 6px;
+}
+.mx-role-actions .iipe-btn {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+}
+
+/* ---------- Sticky batch toolbar ---------- */
+.mx-batch {
+  position: sticky;
+  top: calc(var(--iipe-header-height) + 10px);
+  z-index: 40;
+  background: var(--iipe-surface);
+  border: 2px solid var(--iipe-primary);
+  border-radius: var(--iipe-radius);
+  box-shadow: var(--iipe-shadow);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mx-batch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mx-batch-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+}
+.mx-batch-count {
+  display: inline-block;
+  background: var(--iipe-primary);
+  color: #fff;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.mx-app-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mx-app-picker-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--iipe-muted);
+  margin-right: 2px;
+}
+.mx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: 1px solid var(--iipe-border);
+  background: var(--iipe-surface);
+  color: var(--iipe-text);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.mx-chip:hover {
+  border-color: var(--iipe-primary);
+}
+.mx-chip.picked {
+  background: var(--iipe-primary);
+  border-color: var(--iipe-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.mx-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--iipe-border);
+}
+
+/* ---------- Tables ---------- */
+.mx-table-wrap {
+  border: 1px solid var(--iipe-border);
+  border-radius: var(--iipe-radius);
+  overflow: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
+}
+.mx-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+}
+.mx-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--iipe-surface);
+  border-bottom: 2px solid var(--iipe-border);
+  white-space: nowrap;
+}
+.mx-user-cell {
+  min-width: 220px;
+}
+.mx-user-cell strong {
+  font-size: 0.88rem;
+}
+.mx-user-cell .muted-line {
+  font-size: 0.76rem;
+  color: var(--iipe-muted);
+  margin-top: 1px;
+}
+.mx-center {
+  text-align: center;
+}
+
+/* Grid view: sticky identity columns while scrolling apps sideways */
+.mx-grid-table td:nth-child(1),
+.mx-grid-table td:nth-child(2),
+.mx-grid-table thead th:nth-child(1),
+.mx-grid-table thead th:nth-child(2) {
+  position: sticky;
+  background: var(--iipe-surface);
+  z-index: 2;
+}
+.mx-grid-table td:nth-child(1),
+.mx-grid-table thead th:nth-child(1) {
+  left: 0;
+  min-width: 44px;
+  max-width: 44px;
+  border-right: 1px solid var(--iipe-border);
+}
+.mx-grid-table td:nth-child(2),
+.mx-grid-table thead th:nth-child(2) {
+  left: 44px;
+  min-width: 210px;
+  border-right: 1px solid var(--iipe-border);
+  box-shadow: 4px 0 6px -4px rgba(16, 40, 34, 0.12);
+}
+.mx-grid-table thead th:nth-child(1),
+.mx-grid-table thead th:nth-child(2) {
+  z-index: 4;
+}
+.mx-grid-table tr.selected td:nth-child(1),
+.mx-grid-table tr.selected td:nth-child(2) {
+  background: var(--iipe-primary-light);
+}
+
+/* ---------- Tri-state matrix cell (grid view) ----------
+   One compact control per cell instead of checkbox + chip:
+   — = no access, ✓ = user, ★ = app admin. Click cycles forward. */
+.mx-cell-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px dashed var(--iipe-border);
+  background: transparent;
+  color: var(--iipe-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+.mx-cell-btn:hover {
+  border-color: var(--iipe-primary);
+  color: var(--iipe-primary);
+}
+.mx-cell-btn.user {
+  border: 1px solid color-mix(in srgb, var(--iipe-success) 45%, transparent);
+  background: var(--iipe-success-light);
+  color: var(--iipe-success);
+}
+.mx-cell-btn.admin {
+  border: 1px solid color-mix(in srgb, var(--iipe-accent) 60%, transparent);
+  background: var(--iipe-warning-light);
+  color: var(--iipe-warning);
+}
+.mx-cell-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.mx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 0.76rem;
+  color: var(--iipe-muted);
+}
+.mx-legend .mx-cell-btn,
+.mx-legend .mx-chip {
+  pointer-events: none;
+  width: auto;
+  height: auto;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+}
+
+/* ---------- Small action buttons inside tables ---------- */
+.mx-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.mx-actions .iipe-btn {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+.mx-btn-admin {
+  background: var(--iipe-accent);
+  border-color: color-mix(in srgb, var(--iipe-accent) 80%, #000);
+  color: #1c2b28;
+}
+.mx-btn-admin:hover {
+  background: color-mix(in srgb, var(--iipe-accent) 88%, #000);
+}
+
+/* ---------- Allocator: granted-app pills ---------- */
+.mx-grant-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mx-grant-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  background: var(--iipe-primary-light);
+  border: 1px solid color-mix(in srgb, var(--iipe-primary) 30%, transparent);
+}
+.mx-grant-pill.admin {
+  background: var(--iipe-warning-light);
+  border-color: color-mix(in srgb, var(--iipe-accent) 55%, transparent);
+  color: var(--iipe-warning);
+}
+.mx-grant-pill button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: inherit;
+  line-height: 1;
+}
+.mx-grant-pill .promote {
+  font-size: 0.66rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-weight: 700;
+}
+.mx-grant-pill .revoke {
+  color: var(--iipe-danger);
+}
+
+/* ---------- Checkboxes ---------- */
+.mx-check {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--iipe-primary);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .mx-root {
+    gap: 12px;
+  }
+  .mx-filters {
+    grid-template-columns: 1fr;
+  }
+  .mx-filter-row {
+    justify-content: flex-start;
+  }
+  /* Batch bar: not sticky on phones — it would cover half the screen */
+  .mx-batch {
+    position: static;
+  }
+  .mx-batch-actions .iipe-btn {
+    flex: 1 1 auto;
+  }
+  .mx-role-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .mx-role-actions {
+    justify-content: stretch;
+  }
+  .mx-role-actions .iipe-btn {
+    flex: 1;
+  }
+  .mx-stat {
+    flex: 1;
+    min-width: 80px;
+    padding: 6px 10px;
+  }
+  .mx-stat strong {
+    font-size: 1.1rem;
+  }
+  /* Bigger touch targets on phones */
+  .mx-actions .iipe-btn,
+  .mx-role-actions .iipe-btn {
+    min-height: 34px;
+  }
+  .mx-cell-btn {
+    width: 42px;
+    height: 34px;
+  }
+  .mx-chip {
+    min-height: 34px;
+  }
+  .mx-app-pill {
+    min-height: 36px;
+  }
+  .mx-grid-table td:nth-child(2),
+  .mx-grid-table thead th:nth-child(2) {
+    min-width: 170px;
+  }
+  .mx-table-wrap {
+    max-height: 60vh;
+  }
+}

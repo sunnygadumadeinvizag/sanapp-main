@@ -10,6 +10,7 @@ import {
   PRIMARY_ROLES,
   getRoleLabel,
 } from "./matrixTypes";
+import "../admin-console/app-matrix/matrix.css";
 
 export function AccessMatrixAllocator({
   users,
@@ -109,6 +110,7 @@ export function AccessMatrixAllocator({
       const res = await fetch(apiPath("/api/grants"), {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           userId: user.id,
           username: user.username,
@@ -164,6 +166,7 @@ export function AccessMatrixAllocator({
       const res = await fetch(apiPath("/api/grants/batch"), {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           action: apiAction,
           role: targetRole,
@@ -239,61 +242,45 @@ export function AccessMatrixAllocator({
     });
   }
 
+  const filtersActive =
+    !!searchQuery || filterPrimaryRole !== "ALL" || filterDepartment !== "ALL" || filterAppGrant !== "ALL" || filterSelectionOnly;
+
   return (
-    <div>
+    <div className="mx-root">
       {/* Feedback Toast */}
       {feedback && (
-        <div className={`iipe-alert ${feedback.type}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div className={`iipe-alert ${feedback.type} mx-toast`} role="status">
           <span>{feedback.message}</span>
-          <button type="button" className="iipe-btn secondary" style={{ padding: "2px 8px", fontSize: "0.8rem", marginLeft: 12 }} onClick={() => setFeedback(null)}>
+          <button type="button" className="iipe-btn secondary" aria-label="Dismiss" onClick={() => setFeedback(null)}>
             ✕
           </button>
         </div>
       )}
 
-      {/* Role Quick Selector Cards */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--iipe-muted)", marginBottom: 8 }}>
-          Select Entire Roles:
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      {/* Role Quick Selector */}
+      <div>
+        <div className="mx-card-title" style={{ marginBottom: 8 }}>Select entire roles</div>
+        <div className="mx-app-picker">
           {PRIMARY_ROLES.map((pr) => {
             const roleUsers = users.filter((u) => u.primaryRole === pr.value);
             const allSelected = roleUsers.length > 0 && roleUsers.every((u) => selectedUsernames.has(u.username));
             return (
-              <div
+              <button
                 key={pr.value}
-                style={{
-                  background: "var(--iipe-surface)",
-                  border: allSelected ? "2px solid var(--iipe-primary)" : "1px solid var(--iipe-border)",
-                  borderRadius: "var(--iipe-radius)",
-                  padding: "10px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  flex: "1 1 200px",
+                type="button"
+                className={`mx-chip${allSelected ? " picked" : ""}`}
+                aria-pressed={allSelected}
+                onClick={() => {
+                  setSelectedUsernames((prev) => {
+                    const next = new Set(prev);
+                    if (allSelected) roleUsers.forEach((u) => next.delete(u.username));
+                    else roleUsers.forEach((u) => next.add(u.username));
+                    return next;
+                  });
                 }}
               >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{pr.label}</div>
-                  <div className="iipe-muted" style={{ fontSize: "0.78rem" }}>{roleUsers.length} Users</div>
-                </div>
-                <button
-                  type="button"
-                  className={`iipe-btn ${allSelected ? "primary" : "secondary"}`}
-                  style={{ padding: "4px 10px", fontSize: "0.78rem" }}
-                  onClick={() => {
-                    setSelectedUsernames((prev) => {
-                      const next = new Set(prev);
-                      if (allSelected) roleUsers.forEach((u) => next.delete(u.username));
-                      else roleUsers.forEach((u) => next.add(u.username));
-                      return next;
-                    });
-                  }}
-                >
-                  {allSelected ? "✓ Selected" : "+ Select Role"}
-                </button>
-              </div>
+                {allSelected ? "✓" : "+"} {pr.label} ({roleUsers.length})
+              </button>
             );
           })}
         </div>
@@ -301,70 +288,37 @@ export function AccessMatrixAllocator({
 
       {/* Batch Action Toolbar */}
       {selectedUsernames.size > 0 && (
-        <div
-          style={{
-            background: "var(--iipe-surface)",
-            border: "2px solid var(--iipe-primary)",
-            borderRadius: "var(--iipe-radius)",
-            padding: "16px 20px",
-            marginBottom: 20,
-            boxShadow: "var(--iipe-shadow)",
-            position: "sticky",
-            top: "calc(var(--iipe-header-height) + 10px)",
-            zIndex: 40,
-          }}
-        >
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <span
-                style={{
-                  display: "inline-block",
-                  background: "var(--iipe-primary)",
-                  color: "#fff",
-                  padding: "3px 10px",
-                  borderRadius: 999,
-                  fontWeight: 700,
-                  fontSize: "0.85rem",
-                  marginRight: 10,
-                }}
-              >
-                {selectedUsernames.size} Users Selected
-              </span>
-              <span className="iipe-muted" style={{ fontSize: "0.88rem" }}>
-                Choose application(s) below to allocate as Regular User or APP_ADMIN:
-              </span>
+        <div className="mx-batch">
+          <div className="mx-batch-head">
+            <div className="mx-batch-head-left">
+              <span className="mx-batch-count">{selectedUsernames.size} selected</span>
+              <span className="iipe-muted">Allocate as User or App Admin:</span>
             </div>
-
-            <button type="button" className="iipe-btn secondary" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={handleDeselectAll}>
+            <button type="button" className="iipe-btn secondary" onClick={handleDeselectAll}>
               Deselect All
             </button>
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <span style={{ fontSize: "0.82rem", fontWeight: 600, marginRight: 4 }}>Target Apps:</span>
+          <div className="mx-app-picker">
+            <span className="mx-app-picker-label">Apps:</span>
             <button
               type="button"
-              className="iipe-btn secondary"
-              style={{
-                padding: "3px 10px",
-                fontSize: "0.78rem",
-                background: batchSelectedApps.size === applications.length ? "var(--iipe-primary-light)" : undefined,
-                borderColor: batchSelectedApps.size === applications.length ? "var(--iipe-primary)" : undefined,
-              }}
+              className={`mx-chip${batchSelectedApps.size === applications.length ? " picked" : ""}`}
               onClick={() => {
                 if (batchSelectedApps.size === applications.length) setBatchSelectedApps(new Set());
                 else setBatchSelectedApps(new Set(applications.map((a) => a.clientId)));
               }}
             >
-              {batchSelectedApps.size === applications.length ? "✓ All Apps Picked" : "Select All Apps"}
+              {batchSelectedApps.size === applications.length ? "✓ All apps" : "All apps"}
             </button>
-
             {applications.map((app) => {
               const isPicked = batchSelectedApps.has(app.clientId);
               return (
                 <button
                   key={app.clientId}
                   type="button"
+                  className={`mx-chip${isPicked ? " picked" : ""}`}
+                  aria-pressed={isPicked}
                   onClick={() => {
                     setBatchSelectedApps((prev) => {
                       const next = new Set(prev);
@@ -373,52 +327,30 @@ export function AccessMatrixAllocator({
                       return next;
                     });
                   }}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                    border: isPicked ? "1.5px solid var(--iipe-primary)" : "1px solid var(--iipe-border)",
-                    background: isPicked ? "var(--iipe-primary)" : "var(--iipe-surface)",
-                    color: isPicked ? "#fff" : "var(--iipe-text)",
-                    fontWeight: isPicked ? 600 : 400,
-                  }}
                 >
-                  {isPicked ? "✓ " : "+ "}
-                  {app.name}
+                  {isPicked ? "✓" : "+"} {app.name}
                 </button>
               );
             })}
           </div>
 
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              alignItems: "center",
-              paddingTop: 12,
-              borderTop: "1px dashed var(--iipe-border)",
-            }}
-          >
+          <div className="mx-batch-actions">
             <button
               type="button"
               className="iipe-btn primary"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("grant", "USER")}
             >
-              {batchBusy ? "Processing..." : `+ Grant as User (${batchSelectedApps.size})`}
+              {batchBusy ? "Processing…" : `+ Grant as User (${batchSelectedApps.size})`}
             </button>
 
             <button
               type="button"
-              className="iipe-btn primary"
-              style={{ background: "#d9a441", borderColor: "#c89432", color: "#1c2b28", fontWeight: 700 }}
+              className="iipe-btn secondary mx-btn-admin"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("set_role", "APP_ADMIN")}
             >
-              {batchBusy ? "Processing..." : `⭐ Make App Admin (${batchSelectedApps.size})`}
+              {batchBusy ? "Processing…" : `⭐ Make App Admin (${batchSelectedApps.size})`}
             </button>
 
             <button
@@ -427,7 +359,7 @@ export function AccessMatrixAllocator({
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("revoke")}
             >
-              {batchBusy ? "Processing..." : `- Revoke Selected (${batchSelectedApps.size})`}
+              {batchBusy ? "Processing…" : `− Revoke (${batchSelectedApps.size})`}
             </button>
 
             <span className="iipe-spacer" />
@@ -462,79 +394,60 @@ export function AccessMatrixAllocator({
       )}
 
       {/* Filter Bar */}
-      <div style={{ background: "var(--iipe-bg)", border: "1px solid var(--iipe-border)", borderRadius: "var(--iipe-radius)", padding: "16px", marginBottom: 20 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, alignItems: "end" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Search Users</label>
-            <input
-              type="text"
-              className="iipe-input"
-              placeholder="Name, username, email, roll/emp no..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: "100%", height: 38 }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Primary Role</label>
-            <select className="iipe-select" value={filterPrimaryRole} onChange={(e) => setFilterPrimaryRole(e.target.value)} style={{ width: "100%", height: 38 }}>
-              <option value="ALL">All Roles ({users.length})</option>
-              {PRIMARY_ROLES.map((pr) => (
-                <option key={pr.value} value={pr.value}>{pr.label} ({users.filter((u) => u.primaryRole === pr.value).length})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Department / Section</label>
-            <select className="iipe-select" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} style={{ width: "100%", height: 38 }}>
-              <option value="ALL">All Departments</option>
-              {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>App Access Status</label>
-            <select className="iipe-select" value={filterAppGrant} onChange={(e) => setFilterAppGrant(e.target.value)} style={{ width: "100%", height: 38 }}>
-              <option value="ALL">All Users</option>
-              <option value="ANY">Has At Least 1 App</option>
-              <option value="NONE">Has Zero Apps (No Access)</option>
-              <optgroup label="App Admin of">
-                {applications.map((a) => (<option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>))}
-              </optgroup>
-              <optgroup label="Has Access to">
-                {applications.map((a) => (<option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Access: {a.name}</option>))}
-              </optgroup>
-              <optgroup label="Missing Access to">
-                {applications.map((a) => (<option key={`missing_${a.clientId}`} value={`MISSING_${a.clientId}`}>Missing: {a.name}</option>))}
-              </optgroup>
-            </select>
-          </div>
+      <div className="mx-card">
+        <div className="mx-filters">
+          <input
+            type="search"
+            className="iipe-input"
+            placeholder="Search name, username, email, emp/roll no…"
+            aria-label="Search users"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <select className="iipe-select" aria-label="Filter by primary role" value={filterPrimaryRole} onChange={(e) => setFilterPrimaryRole(e.target.value)}>
+            <option value="ALL">All Roles ({users.length})</option>
+            {PRIMARY_ROLES.map((pr) => (
+              <option key={pr.value} value={pr.value}>{pr.label} ({users.filter((u) => u.primaryRole === pr.value).length})</option>
+            ))}
+          </select>
+          <select className="iipe-select" aria-label="Filter by department" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
+            <option value="ALL">All Departments</option>
+            {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+          </select>
+          <select className="iipe-select" aria-label="Filter by app access" value={filterAppGrant} onChange={(e) => setFilterAppGrant(e.target.value)}>
+            <option value="ALL">All Users</option>
+            <option value="ANY">Has At Least 1 App</option>
+            <option value="NONE">Has Zero Apps (No Access)</option>
+            <optgroup label="App Admin of">
+              {applications.map((a) => (<option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>))}
+            </optgroup>
+            <optgroup label="Has Access to">
+              {applications.map((a) => (<option key={`has_${a.clientId}`} value={`HAS_${a.clientId}`}>Access: {a.name}</option>))}
+            </optgroup>
+            <optgroup label="Missing Access to">
+              {applications.map((a) => (<option key={`missing_${a.clientId}`} value={`MISSING_${a.clientId}`}>Missing: {a.name}</option>))}
+            </optgroup>
+          </select>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--iipe-border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Selection ({selectedUsernames.size}):</span>
-            <button type="button" className="iipe-btn secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }} onClick={handleSelectAllFiltered}>
-              Select All Filtered ({filteredUsers.length})
+        <div className="mx-filter-row">
+          <button type="button" className="iipe-btn secondary" onClick={handleSelectAllFiltered}>
+            Select All Filtered ({filteredUsers.length})
+          </button>
+          {selectedUsernames.size > 0 && (
+            <button type="button" className="iipe-btn secondary" onClick={handleDeselectAll}>
+              Clear Selection
             </button>
-            {selectedUsernames.size > 0 && (
-              <button type="button" className="iipe-btn secondary" style={{ padding: "4px 10px", fontSize: "0.8rem" }} onClick={handleDeselectAll}>
-                Clear Selection
-              </button>
-            )}
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.8rem", marginLeft: 8, cursor: "pointer" }}>
-              <input type="checkbox" checked={filterSelectionOnly} onChange={(e) => setFilterSelectionOnly(e.target.checked)} />
-              Show selected only
-            </label>
-          </div>
-
-          {(searchQuery || filterPrimaryRole !== "ALL" || filterDepartment !== "ALL" || filterAppGrant !== "ALL" || filterSelectionOnly) && (
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.8rem", marginLeft: 4, cursor: "pointer" }}>
+            <input type="checkbox" checked={filterSelectionOnly} onChange={(e) => setFilterSelectionOnly(e.target.checked)} />
+            Show selected only
+          </label>
+          <span className="iipe-spacer" />
+          {filtersActive && (
             <button
               type="button"
               className="iipe-btn secondary"
-              style={{ padding: "4px 10px", fontSize: "0.8rem" }}
               onClick={() => {
                 setSearchQuery("");
                 setFilterPrimaryRole("ALL");
@@ -550,33 +463,32 @@ export function AccessMatrixAllocator({
       </div>
 
       {/* User Table with App Pills and Roles */}
-      <div className="iipe-table-scroll" style={{ maxHeight: "65vh", overflowY: "auto", border: "1px solid var(--iipe-border)", borderRadius: "var(--iipe-radius)" }}>
-        <table className="iipe-table" style={{ width: "100%" }}>
+      <div className="mx-table-wrap">
+        <table className="iipe-table mx-table">
           <thead>
             <tr>
-              <th style={{ width: 40, textAlign: "center" }}>
+              <th className="mx-center">
                 <input
                   type="checkbox"
+                  className="mx-check"
                   aria-label="Select all"
                   checked={filteredUsers.length > 0 && filteredUsers.every((u) => selectedUsernames.has(u.username))}
                   onChange={(e) => {
                     if (e.target.checked) handleSelectAllFiltered();
                     else handleDeselectAll();
                   }}
-                  style={{ width: 17, height: 17, cursor: "pointer" }}
                 />
               </th>
-              <th style={{ minWidth: 220 }}>User Details</th>
-              <th style={{ minWidth: 150 }}>Role &amp; Department</th>
-              <th>Currently Granted Applications</th>
-              <th style={{ width: 100, textAlign: "right" }}>Quick Actions</th>
+              <th className="mx-user-cell">User</th>
+              <th>Role &amp; Department</th>
+              <th>Granted Applications</th>
             </tr>
           </thead>
           <tbody>
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", padding: "32px 16px" }}>
-                  <div className="iipe-muted">No users found matching current filters.</div>
+                <td colSpan={4} className="mx-center" style={{ padding: "32px 16px" }}>
+                  <span className="iipe-muted">No users found matching current filters.</span>
                 </td>
               </tr>
             ) : (
@@ -590,93 +502,56 @@ export function AccessMatrixAllocator({
                   .filter(Boolean) as { app: MatrixApp; role: string }[];
 
                 return (
-                  <tr key={user.id} style={{ background: isSelected ? "var(--iipe-primary-light)" : undefined }}>
-                    <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                  <tr key={user.id} style={isSelected ? { background: "var(--iipe-primary-light)" } : undefined}>
+                    <td className="mx-center">
                       <input
                         type="checkbox"
+                        className="mx-check"
                         checked={isSelected}
                         onChange={() => toggleUserSelection(user.username)}
                         aria-label={`Select ${user.name}`}
-                        style={{ width: 17, height: 17, cursor: "pointer" }}
                       />
                     </td>
-                    <td style={{ verticalAlign: "middle" }}>
-                      <div style={{ fontWeight: 600 }}>{user.name}</div>
-                      <div className="iipe-muted" style={{ fontSize: "0.8rem" }}>
-                        @{user.username} {user.email && `• ${user.email}`}
-                      </div>
-                      {user.empNo && <span className="iipe-badge" style={{ fontSize: "0.7rem", marginRight: 4 }}>Emp: {user.empNo}</span>}
-                      {user.rollNo && <span className="iipe-badge" style={{ fontSize: "0.7rem", marginRight: 4 }}>Roll: {user.rollNo}</span>}
-                    </td>
-                    <td style={{ verticalAlign: "middle" }}>
-                      <span className="iipe-badge" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                        {getRoleLabel(user.primaryRole)}
-                      </span>
-                      {user.departmentName && (
-                        <div style={{ fontSize: "0.75rem", color: "var(--iipe-muted)", marginTop: 4 }}>
-                          🏛️ {user.departmentName}
-                        </div>
+                    <td className="mx-user-cell">
+                      <strong>{user.name}</strong>
+                      <div className="muted-line">@{user.username}</div>
+                      {(user.empNo || user.rollNo) && (
+                        <div className="muted-line">{user.empNo ? `Emp ${user.empNo}` : `Roll ${user.rollNo}`}</div>
                       )}
                     </td>
-                    <td style={{ verticalAlign: "middle" }}>
+                    <td>
+                      <span className="iipe-badge">{getRoleLabel(user.primaryRole)}</span>
+                      {user.departmentName && (
+                        <div className="muted-line">{user.departmentName}</div>
+                      )}
+                    </td>
+                    <td>
                       {userGrantedApps.length === 0 ? (
-                        <span className="iipe-muted" style={{ fontSize: "0.8rem", fontStyle: "italic" }}>
-                          No applications granted
-                        </span>
+                        <span className="iipe-muted">—</span>
                       ) : (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        <div className="mx-grant-pills">
                           {userGrantedApps.map(({ app, role }) => {
                             const isAppAdmin = role === "APP_ADMIN";
+                            const isBusy = busyKeys.has(`${user.username}:${app.clientId}`) || batchBusy;
                             return (
-                              <span
-                                key={app.clientId}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  background: isAppAdmin
-                                    ? "color-mix(in srgb, var(--iipe-accent) 20%, transparent)"
-                                    : "color-mix(in srgb, var(--iipe-primary) 12%, transparent)",
-                                  border: isAppAdmin
-                                    ? "1.5px solid #d9a441"
-                                    : "1px solid color-mix(in srgb, var(--iipe-primary) 30%, transparent)",
-                                  borderRadius: 4,
-                                  padding: "2px 8px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 500,
-                                }}
-                              >
+                              <span key={app.clientId} className={`mx-grant-pill${isAppAdmin ? " admin" : ""}`}>
                                 <span>{isAppAdmin ? "⭐ " : ""}{app.name}</span>
                                 <button
                                   type="button"
+                                  className="promote"
+                                  disabled={isBusy}
                                   onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
                                   title={isAppAdmin ? "Demote to regular User" : "Promote to App Admin"}
-                                  style={{
-                                    background: isAppAdmin ? "#d9a441" : "var(--iipe-border)",
-                                    color: isAppAdmin ? "#1c2b28" : "inherit",
-                                    border: "none",
-                                    borderRadius: 3,
-                                    cursor: "pointer",
-                                    fontSize: "0.65rem",
-                                    fontWeight: 700,
-                                    padding: "1px 4px",
-                                  }}
                                 >
-                                  {isAppAdmin ? "Admin" : "User"}
+                                  {isAppAdmin ? "User" : "★"}
                                 </button>
                                 <button
                                   type="button"
+                                  className="revoke"
+                                  disabled={isBusy}
                                   onClick={() => toggleSingle(user, app, false)}
                                   title={`Revoke ${app.name}`}
-                                  style={{
-                                    background: "none",
-                                    border: "none",
-                                    cursor: "pointer",
-                                    color: "var(--iipe-danger)",
-                                    fontWeight: "bold",
-                                    fontSize: "0.8rem",
-                                    padding: "0 2px",
-                                  }}
+                                  aria-label={`Revoke ${app.name}`}
                                 >
                                   ✕
                                 </button>
@@ -685,16 +560,6 @@ export function AccessMatrixAllocator({
                           })}
                         </div>
                       )}
-                    </td>
-                    <td style={{ verticalAlign: "middle", textAlign: "right" }}>
-                      <button
-                        type="button"
-                        className="iipe-btn secondary"
-                        style={{ padding: "3px 8px", fontSize: "0.75rem" }}
-                        onClick={() => toggleUserSelection(user.username)}
-                      >
-                        {isSelected ? "Deselect" : "Select"}
-                      </button>
                     </td>
                   </tr>
                 );
