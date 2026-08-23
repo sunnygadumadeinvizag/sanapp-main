@@ -57,6 +57,12 @@ const CONSOLE_SECTIONS: {
     href: "/admin-console/email",
     icon: "✉️",
   },
+  {
+    title: "Session Timeout",
+    desc: "Configure idle timeout and automatic logout duration across the platform.",
+    href: "/admin-console/session",
+    icon: "⏱️",
+  },
 ];
 
 export default async function AdminConsolePage() {

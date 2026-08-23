@@ -44,6 +44,8 @@ export async function GET() {
       data.username.toLowerCase() === appUsername.toLowerCase();
     return NextResponse.json({
       valid: data.valid === true && sameUser,
+      idleTimeoutMinutes: data.idleTimeoutMinutes,
+      idleTimeoutMs: data.idleTimeoutMs,
       reason: data.valid !== true ? "sso_session_invalid" : sameUser ? undefined : "sso_user_changed",
     });
   } catch {

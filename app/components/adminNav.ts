@@ -19,7 +19,7 @@ export function userNavItems(active?: "home" | "notifications"): NavItem[] {
  * Every admin function lives under /admin-console/<function>.
  */
 export function adminNavItems(
-  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email"
+  active?: "console" | "matrix" | "applications" | "users" | "departments" | "announcements" | "theme" | "email" | "session"
 ): NavItem[] {
   return [
     { label: "Admin Console", href: "/admin-console", heading: true, active: active === "console" },
@@ -30,6 +30,7 @@ export function adminNavItems(
     { label: "Announcements", href: "/admin-console/announcements", active: active === "announcements" },
     { label: "Theme & Branding", href: "/admin-console/theme", active: active === "theme" },
     { label: "Email & SMTP", href: "/admin-console/email", active: active === "email" },
+    { label: "Session Timeout", href: "/admin-console/session", active: active === "session" },
   ];
 }
 
