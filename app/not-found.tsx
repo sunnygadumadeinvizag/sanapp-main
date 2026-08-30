@@ -36,12 +36,18 @@ export default async function NotFoundPage() {
   const me = await verifyMainSession(session);
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
+  const themeRes = await fetch(`${SSO_BASE_URL}/api/theme`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(2000),
+  }).then((r) => r.json()).catch(() => ({}));
+  const showAccount = !themeRes.accountDisplayDisabled || isSuperAdmin;
+
   return (
     <PageShell
       appName="Main"
       header={{
         navItems: getPlatformNav({
-    launcher: true,
+          launcher: true,
           mainBaseUrl: MAIN_BASE_URL,
           ssoBaseUrl: SSO_BASE_URL,
           active: "home",
@@ -54,7 +60,7 @@ export default async function NotFoundPage() {
             role={isSuperAdmin ? "Super Admin" : "User"}
             signOutHref="/api/logout"
           >
-            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            {showAccount && <a href={`${SSO_BASE_URL}/account`}>My Account</a>}
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>

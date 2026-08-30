@@ -184,6 +184,7 @@ export function UsersManager({
   guides,
   ssoBaseUrl,
   initialPolicy,
+  initialAccountDisplayDisabled = false,
 }: {
   initialUsers: UserRow[];
   departments: Option[];
@@ -192,6 +193,7 @@ export function UsersManager({
   guides: Option[];
   ssoBaseUrl: string;
   initialPolicy: string[];
+  initialAccountDisplayDisabled?: boolean;
 }) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [query, setQuery] = useState("");
@@ -201,8 +203,9 @@ export function UsersManager({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Profile lock policy (per primary role) + CSV import state.
+  // Profile lock policy (per primary role) + CSV import state + account display.
   const [policy, setPolicy] = useState<string[]>(initialPolicy);
+  const [accountDisplayDisabled, setAccountDisplayDisabled] = useState<boolean>(initialAccountDisplayDisabled);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -462,6 +465,20 @@ export function UsersManager({
     }
   }
 
+  async function toggleAccountDisplay(disabled: boolean) {
+    setPolicyBusy(true);
+    setError(null);
+    try {
+      const data = await api("/api/profile-policy", "PATCH", { accountDisplayDisabled: disabled });
+      setAccountDisplayDisabled(Boolean(data.accountDisplayDisabled));
+      setNotice(`Account display & access for regular users ${disabled ? "disabled" : "enabled"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setPolicyBusy(false);
+    }
+  }
+
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -586,11 +603,41 @@ export function UsersManager({
         </div>
 
         <div className="iipe-card" style={{ marginBottom: 0 }}>
-          <h3 style={{ marginTop: 0 }}>Profile edit policy</h3>
-          <p className="iipe-muted" style={{ marginTop: 0 }}>
-            Lock profile editing for whole primary roles (users of a locked role
-            cannot change their own name/email/avatar in My Account). Individual
-            users can also be locked from the table below.
+          <h3 style={{ marginTop: 0 }}>Account & Profile Policy</h3>
+          <p className="iipe-muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
+            Control user profile editing and account page access across all applications.
+          </p>
+
+          <div style={{ padding: "10px 12px", background: "var(--iipe-muted-bg, rgba(0,0,0,0.03))", borderRadius: 8, marginBottom: 14, border: "1px solid var(--iipe-border, #e2e8f0)" }}>
+            <label
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "flex-start",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.9rem",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={accountDisplayDisabled}
+                disabled={policyBusy}
+                onChange={(e) => void toggleAccountDisplay(e.target.checked)}
+                style={{ width: 18, height: 18, marginTop: 2 }}
+              />
+              <div>
+                <div>Disable My Account access & display for regular users</div>
+                <div className="iipe-muted" style={{ fontWeight: 400, fontSize: "0.82rem", marginTop: 2 }}>
+                  When enabled, regular users will not see &quot;My Account&quot; in profile dropdowns or sidebars, and direct visits to <code>/sso/account</code> are blocked. Super Admins retain full access.
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <h4 style={{ margin: "8px 0 4px", fontSize: "0.9rem" }}>Lock profile editing by role</h4>
+          <p className="iipe-muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
+            Users of a locked role cannot change their own name/email/avatar in My Account. Individual users can also be locked from the table below.
           </p>
           {PRIMARY_ROLES.map((r) => (
             <label
@@ -599,9 +646,9 @@ export function UsersManager({
                 display: "flex",
                 gap: 8,
                 alignItems: "center",
-                padding: "4px 0",
+                padding: "3px 0",
                 cursor: "pointer",
-                fontSize: "0.9rem",
+                fontSize: "0.88rem",
               }}
             >
               <input
@@ -614,9 +661,9 @@ export function UsersManager({
               {r.label}
             </label>
           ))}
-          <div className="iipe-muted" style={{ marginTop: 8 }}>
+          <div className="iipe-muted" style={{ marginTop: 8, fontSize: "0.82rem" }}>
             {policy.length === 0
-              ? "No roles locked — everyone can edit their own profile."
+              ? "No roles locked — users with account access can edit their own profile."
               : `Locked: ${policy.map((r) => r.replace(/_/g, " ").toLowerCase()).join(", ")}.`}
           </div>
         </div>

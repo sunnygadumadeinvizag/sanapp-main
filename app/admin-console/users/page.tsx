@@ -58,9 +58,9 @@ export default async function UsersPage() {
     }),
   ]);
   const ssoUsers: SsoUser[] = usersRes.ok ? (await usersRes.json()).users : [];
-  const initialPolicy: string[] = policyRes.ok
-    ? ((await policyRes.json()).locked ?? [])
-    : [];
+  const policyData = policyRes.ok ? await policyRes.json() : {};
+  const initialPolicy: string[] = policyData.locked ?? [];
+  const initialAccountDisplayDisabled: boolean = Boolean(policyData.accountDisplayDisabled);
 
   const grants = await prisma.userApplication.findMany();
   const countByUser = new Map<string, number>();
@@ -198,6 +198,7 @@ export default async function UsersPage() {
                 guides={guides}
                 ssoBaseUrl={SSO_BASE_URL}
                 initialPolicy={initialPolicy}
+                initialAccountDisplayDisabled={initialAccountDisplayDisabled}
               />
             </div>
           ) : (

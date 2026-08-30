@@ -25,6 +25,12 @@ export default async function NotificationsPage() {
     active: "home",
   });
 
+  const themeRes = await fetch(`${SSO_BASE_URL}/api/theme`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(2000),
+  }).then((r) => r.json()).catch(() => ({}));
+  const showAccount = !themeRes.accountDisplayDisabled || isSuperAdmin;
+
   return (
     <PageShell
       appName="Main"
@@ -38,7 +44,7 @@ export default async function NotificationsPage() {
             role={isSuperAdmin ? "Super Admin" : "User"}
             signOutHref="/api/logout"
           >
-            <a href={`${SSO_BASE_URL}/account`}>My Account</a>
+            {showAccount && <a href={`${SSO_BASE_URL}/account`}>My Account</a>}
             {isSuperAdmin && (
               <>
                 <div className="iipe-dropdown-section">Admin Console</div>
