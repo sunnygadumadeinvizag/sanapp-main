@@ -1,7 +1,9 @@
 "use client";
 import { apiPath } from "sanapp-common-ui";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { exportUsersXlsx } from "../lib/exportUsersXlsx";
+import "./users-manager.css";
 
 export type UserRow = {
   id: string;
@@ -27,6 +29,11 @@ export type UserRow = {
   courseName: string | null;
   guideId: string | null;
   guideName: string | null;
+  natureOfAdmission: string | null;
+  discipline: string | null;
+  admissionYear: string | null;
+  admissionSemester: string | null;
+  admissionCategory: string | null;
   isActive: boolean;
   isTest: boolean;
   avatar: string | null;
@@ -101,6 +108,58 @@ type ImportResult = {
   errors: Array<{ row: number; username: string; error: string }>;
 };
 
+type SortKey =
+  | "name"
+  | "username"
+  | "email"
+  | "primaryRole"
+  | "department"
+  | "status"
+  | "apps"
+  | "createdAt";
+
+type SortDir = "asc" | "desc";
+
+type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 25;
+
+function roleLabel(value: string) {
+  return PRIMARY_ROLES.find((r) => r.value === value)?.label ?? value.replace(/_/g, " ");
+}
+
+function compareValues(a: unknown, b: unknown, dir: SortDir): number {
+  const av = a == null ? "" : String(a);
+  const bv = b == null ? "" : String(b);
+  const cmp = av.localeCompare(bv, undefined, { sensitivity: "base", numeric: true });
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function pageWindow(current: number, total: number): Array<number | "gap"> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
+  if (current <= 3) {
+    pages.add(2);
+    pages.add(3);
+    pages.add(4);
+  }
+  if (current >= total - 2) {
+    pages.add(total - 1);
+    pages.add(total - 2);
+    pages.add(total - 3);
+  }
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out: Array<number | "gap"> = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push("gap");
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
+
 const EMPTY_DRAFT: Draft = {
   name: "",
   username: "",
@@ -167,6 +226,11 @@ function rowFromUser(u: Record<string, unknown>, appCount: number): UserRow {
     courseName: crs?.name ?? null,
     guideId: u.guideId ? String(u.guideId) : null,
     guideName: guide?.name ?? null,
+    natureOfAdmission: u.natureOfAdmission ? String(u.natureOfAdmission) : null,
+    discipline: u.discipline ? String(u.discipline) : null,
+    admissionYear: u.admissionYear ? String(u.admissionYear) : null,
+    admissionSemester: u.admissionSemester ? String(u.admissionSemester) : null,
+    admissionCategory: u.admissionCategory ? String(u.admissionCategory) : null,
     isActive: Boolean(u.isActive),
     isTest: Boolean(u.isTest),
     avatar: u.avatar ? String(u.avatar) : null,
@@ -197,6 +261,13 @@ export function UsersManager({
 }) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [query, setQuery] = useState("");
+  const [filterPrimaryRole, setFilterPrimaryRole] = useState("ALL");
+  const [filterDepartment, setFilterDepartment] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("ALL");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [modal, setModal] = useState<ModalState>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
@@ -210,17 +281,133 @@ export function UsersManager({
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+  const hasActiveFilters =
+    query.trim() !== "" ||
+    filterPrimaryRole !== "ALL" ||
+    filterDepartment !== "ALL" ||
+    filterStatus !== "ALL";
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, filterPrimaryRole, filterDepartment, filterStatus, pageSize]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.username.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        (u.departmentName ?? "").toLowerCase().includes(q)
+    let list = users;
+
+    if (q) {
+      list = list.filter((u) => {
+        const haystack = [
+          u.name,
+          u.username,
+          u.email,
+          u.departmentName ?? "",
+          u.rollNo ?? "",
+          u.empNo ?? "",
+          u.phone ?? "",
+          u.designation ?? "",
+          u.discipline ?? "",
+          u.programmeName ?? "",
+          u.courseName ?? "",
+          u.guideName ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    if (filterPrimaryRole !== "ALL") {
+      list = list.filter((u) => u.primaryRole === filterPrimaryRole);
+    }
+    if (filterDepartment !== "ALL") {
+      list = list.filter((u) => u.departmentId === filterDepartment);
+    }
+    if (filterStatus !== "ALL") {
+      const wantActive = filterStatus === "ACTIVE";
+      list = list.filter((u) => u.isActive === wantActive);
+    }
+
+    const dir = sortDir;
+    const key = sortKey;
+    return [...list].sort((a, b) => {
+      switch (key) {
+        case "name":
+          return compareValues(a.name, b.name, dir);
+        case "username":
+          return compareValues(a.username, b.username, dir);
+        case "email":
+          return compareValues(a.email, b.email, dir);
+        case "primaryRole":
+          return (
+            compareValues(roleLabel(a.primaryRole), roleLabel(b.primaryRole), dir) ||
+            compareValues(a.name, b.name, "asc")
+          );
+        case "department":
+          return (
+            compareValues(a.departmentName ?? "", b.departmentName ?? "", dir) ||
+            compareValues(a.name, b.name, "asc")
+          );
+        case "status": {
+          const av = a.isActive ? "Active" : "Inactive";
+          const bv = b.isActive ? "Active" : "Inactive";
+          return compareValues(av, bv, dir) || compareValues(a.name, b.name, "asc");
+        }
+        case "apps":
+          return (
+            (a.appCount - b.appCount) * (dir === "asc" ? 1 : -1) ||
+            compareValues(a.name, b.name, "asc")
+          );
+        case "createdAt":
+          return (
+            (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) *
+              (dir === "asc" ? 1 : -1) ||
+            compareValues(a.name, b.name, "asc")
+          );
+        default:
+          return 0;
+      }
+    });
+  }, [users, query, filterPrimaryRole, filterDepartment, filterStatus, sortKey, sortDir]);
+
+  const totalFiltered = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const paged = filtered.slice(pageStart, pageStart + pageSize);
+  const pageEnd = Math.min(pageStart + pageSize, totalFiltered);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setFilterPrimaryRole("ALL");
+    setFilterDepartment("ALL");
+    setFilterStatus("ALL");
+    setPage(1);
+  }
+
+  function sortIndicator(key: SortKey) {
+    if (sortKey !== key) return <span className="um-sort-ind" aria-hidden="true">↕</span>;
+    return (
+      <span className="um-sort-ind" aria-hidden="true">
+        {sortDir === "asc" ? "↑" : "↓"}
+      </span>
     );
-  }, [users, query]);
+  }
+
+  function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
+    if (sortKey !== key) return "none";
+    return sortDir === "asc" ? "ascending" : "descending";
+  }
 
   const isStaff =
     draft.primaryRole === "STAFF_TEACHING" || draft.primaryRole === "STAFF_NON_TEACHING";
@@ -520,7 +707,14 @@ export function UsersManager({
         .join(" · ");
     }
     if (u.primaryRole === "SCHOLAR") {
-      return [u.rollNo ? `Roll ${u.rollNo}` : "", u.guideName ? `Guide: ${u.guideName}` : ""]
+      return [
+        u.rollNo ? `Roll ${u.rollNo}` : "",
+        u.discipline ?? "",
+        u.admissionYear ? `${u.admissionYear}${u.admissionSemester ? " " + u.admissionSemester : ""}` : "",
+        u.admissionCategory ?? "",
+        u.natureOfAdmission ?? "",
+        u.guideName ? `Guide: ${u.guideName}` : "",
+      ]
         .filter(Boolean)
         .join(" · ");
     }
@@ -563,9 +757,17 @@ export function UsersManager({
             reported without blocking the rest.
           </p>
           <div className="iipe-row" style={{ gap: 8 }}>
-            <a className="iipe-btn secondary" href="/api/users/csv-template">
+            <a className="iipe-btn secondary" href={apiPath("/api/users/csv-template")} download>
               Download template
             </a>
+            <button
+              className="iipe-btn secondary"
+              type="button"
+              onClick={() => exportUsersXlsx(filtered, hasActiveFilters)}
+              disabled={filtered.length === 0}
+            >
+              Export XLSX
+            </button>
             <label
               className="iipe-btn"
               style={{ cursor: "pointer", margin: 0 }}
@@ -669,36 +871,105 @@ export function UsersManager({
         </div>
       </div>
 
-      <div className="iipe-row" style={{ marginBottom: 14 }}>
+      <div className="um-toolbar">
         <input
+          type="search"
           className="iipe-input"
-          style={{ maxWidth: 320 }}
-          placeholder="Search name, username, email or department…"
+          placeholder="Search name, username, email, roll/emp no…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search users"
         />
-        <span className="iipe-spacer" />
-        <button className="iipe-btn" type="button" onClick={openAdd} disabled={busy}>
-          ＋ Add user
-        </button>
+        <select
+          className="iipe-select"
+          aria-label="Filter by primary role"
+          value={filterPrimaryRole}
+          onChange={(e) => setFilterPrimaryRole(e.target.value)}
+        >
+          <option value="ALL">All roles</option>
+          {PRIMARY_ROLES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="iipe-select"
+          aria-label="Filter by department"
+          value={filterDepartment}
+          onChange={(e) => setFilterDepartment(e.target.value)}
+        >
+          <option value="ALL">All departments</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="iipe-select"
+          aria-label="Filter by status"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
+        >
+          <option value="ALL">All statuses</option>
+          <option value="ACTIVE">Active only</option>
+          <option value="INACTIVE">Inactive only</option>
+        </select>
+        <div className="um-toolbar-actions">
+          {hasActiveFilters && (
+            <button className="iipe-btn secondary" type="button" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
+          <button className="iipe-btn" type="button" onClick={openAdd} disabled={busy}>
+            ＋ Add user
+          </button>
+        </div>
+      </div>
+
+      <div className="um-meta" style={{ marginBottom: 8 }}>
+        {totalFiltered === users.length
+          ? `${users.length} user${users.length === 1 ? "" : "s"}`
+          : `${totalFiltered} of ${users.length} user${users.length === 1 ? "" : "s"}`}
+        {sortKey ? ` · sorted by ${sortKey === "apps" ? "apps" : sortKey} (${sortDir})` : ""}
       </div>
 
       <div className="iipe-table-scroll">
         <table className="iipe-table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Email</th>
-              <th>Profile</th>
+              <th aria-sort={ariaSort("name")}>
+                <button type="button" className="um-th-sort" onClick={() => toggleSort("name")}>
+                  User {sortIndicator("name")}
+                </button>
+              </th>
+              <th aria-sort={ariaSort("email")}>
+                <button type="button" className="um-th-sort" onClick={() => toggleSort("email")}>
+                  Email {sortIndicator("email")}
+                </button>
+              </th>
+              <th aria-sort={ariaSort("primaryRole")}>
+                <button type="button" className="um-th-sort" onClick={() => toggleSort("primaryRole")}>
+                  Profile {sortIndicator("primaryRole")}
+                </button>
+              </th>
               <th>Platform Role</th>
-              <th>Status</th>
-              <th style={{ textAlign: "center" }}>Apps</th>
+              <th aria-sort={ariaSort("status")}>
+                <button type="button" className="um-th-sort" onClick={() => toggleSort("status")}>
+                  Status {sortIndicator("status")}
+                </button>
+              </th>
+              <th style={{ textAlign: "center" }} aria-sort={ariaSort("apps")}>
+                <button type="button" className="um-th-sort" onClick={() => toggleSort("apps")}>
+                  Apps {sortIndicator("apps")}
+                </button>
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((u) => (
+            {paged.map((u) => (
               <tr key={u.id}>
                 <td>
                   <div className="iipe-row" style={{ gap: 10, flexWrap: "nowrap" }}>
@@ -803,16 +1074,82 @@ export function UsersManager({
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {paged.length === 0 && (
               <tr>
                 <td colSpan={7} className="iipe-muted">
-                  {users.length === 0 ? "No users found." : "No users match your search."}
+                  {users.length === 0
+                    ? "No users found."
+                    : hasActiveFilters
+                      ? "No users match your search or filters."
+                      : "No users match your search."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {totalFiltered > 0 && (
+        <nav className="um-pager" aria-label="Users table pagination">
+          <span className="um-meta">
+            Showing {pageStart + 1}–{pageEnd} of {totalFiltered}
+          </span>
+          <span className="iipe-spacer" />
+          <label className="um-meta" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Rows
+            <select
+              className="iipe-select um-page-size"
+              aria-label="Rows per page"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="um-pager-pages">
+            <button
+              type="button"
+              className="um-page-btn"
+              onClick={() => setPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+            >
+              ‹ Prev
+            </button>
+            {pageWindow(currentPage, totalPages).map((item, idx) =>
+              item === "gap" ? (
+                <span key={`gap-${idx}`} className="um-page-ellipsis" aria-hidden="true">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={item}
+                  type="button"
+                  className={`um-page-btn${item === currentPage ? " active" : ""}`}
+                  onClick={() => setPage(item)}
+                  aria-label={`Page ${item}`}
+                  aria-current={item === currentPage ? "page" : undefined}
+                >
+                  {item}
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              className="um-page-btn"
+              onClick={() => setPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              aria-label="Next page"
+            >
+              Next ›
+            </button>
+          </div>
+        </nav>
+      )}
 
       {modal && (
         <div className="iipe-modal-overlay" onClick={() => !busy && setModal(null)}>

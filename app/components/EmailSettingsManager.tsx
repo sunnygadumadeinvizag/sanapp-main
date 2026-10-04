@@ -25,6 +25,52 @@ export function EmailSettingsManager() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Email sending guard (skip / test redirect)
+  const [skipSending, setSkipSending] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [guardBusy, setGuardBusy] = useState(false);
+  const [guardError, setGuardError] = useState<string | null>(null);
+  const [guardNotice, setGuardNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(apiPath("/api/email-guards"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { skipSending?: boolean; testEmail?: string } | null) => {
+        if (!d) return;
+        setSkipSending(Boolean(d.skipSending));
+        setTestEmail(d.testEmail ?? "");
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveGuards(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardError(null);
+    setGuardNotice(null);
+    const email = testEmail.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setGuardError("Enter a valid test email address, or leave the field empty.");
+      return;
+    }
+    setGuardBusy(true);
+    try {
+      const res = await fetch(apiPath("/api/email-guards"), {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ skipSending, testEmail: email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not save the email guard settings");
+      setSkipSending(Boolean(data.skipSending));
+      setTestEmail(data.testEmail ?? "");
+      setGuardNotice(data.message ?? "Email guard settings saved.");
+    } catch (err) {
+      setGuardError(err instanceof Error ? err.message : "Could not save the email guard settings");
+    } finally {
+      setGuardBusy(false);
+    }
+  }
+
   useEffect(() => {
     fetch(apiPath("/api/email-settings"))
       .then((r) => (r.ok ? r.json() : null))
@@ -89,6 +135,62 @@ export function EmailSettingsManager() {
   }
 
   return (
+    <>
+    <div className="iipe-card" style={{ borderColor: skipSending ? "var(--iipe-danger, #c0392b)" : undefined }}>
+      <h2>Email sending guard</h2>
+      <p className="iipe-muted" style={{ marginTop: 0 }}>
+        Safety controls that apply to <strong>every email the platform sends</strong> —
+        password-reset OTPs and all app notifications (Facilities, Log Request,
+        Inventory, …). Use the test inbox while testing; use Skip while you want
+        the platform completely silent.
+      </p>
+
+      {guardNotice && <div className="iipe-alert success">{guardNotice}</div>}
+      {guardError && <div className="iipe-alert danger">{guardError}</div>}
+
+      {skipSending && (
+        <div className="iipe-alert danger" style={{ marginBottom: 12 }}>
+          <strong>Skipping is ON — nobody receives any emails right now.</strong>{" "}
+          Test-email redirect is kept but ignored until skipping is turned off.
+        </div>
+      )}
+
+      <form onSubmit={saveGuards} className="iipe-form">
+        <label className="iipe-field" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={skipSending}
+            onChange={(e) => setSkipSending(e.target.checked)}
+            style={{ width: 18, height: 18 }}
+          />
+          <span className="iipe-label" style={{ margin: 0 }}>
+            Skip sending emails (no one receives anything)
+          </span>
+        </label>
+
+        <label className="iipe-field">
+          <span className="iipe-label">Send all emails to this test email</span>
+          <input
+            className="iipe-input"
+            type="email"
+            value={testEmail}
+            onChange={(e) => setTestEmail(e.target.value)}
+            placeholder="test-inbox@iipe.ac.in (leave empty to send to real recipients)"
+            autoComplete="off"
+          />
+          <span className="iipe-muted" style={{ fontSize: "0.82rem", marginTop: 4, display: "block" }}>
+            When set, every outgoing email is redirected to this address only —
+            the subject gets a [TEST] prefix and the original recipients are
+            noted in the body. Leave empty to deliver mail normally.
+          </span>
+        </label>
+
+        <button className="iipe-btn primary" type="submit" disabled={guardBusy}>
+          {guardBusy ? "Saving…" : "Save email guard"}
+        </button>
+      </form>
+    </div>
+
     <div className="iipe-card">
       <h2>Email / SMTP configuration</h2>
       <p className="iipe-muted" style={{ marginTop: 0 }}>
@@ -176,5 +278,6 @@ export function EmailSettingsManager() {
         </button>
       </form>
     </div>
+    </>
   );
 }

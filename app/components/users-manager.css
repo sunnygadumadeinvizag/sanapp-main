@@ -1,0 +1,120 @@
+/* User Management table — toolbar, sortable headers, pagination */
+
+.um-toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.6fr) repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.um-toolbar .iipe-input,
+.um-toolbar .iipe-select {
+  height: 38px;
+}
+
+.um-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  .um-toolbar {
+    grid-template-columns: minmax(200px, 1.5fr) minmax(140px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) auto;
+  }
+  .um-toolbar-actions {
+    grid-column: auto;
+  }
+}
+
+.um-th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.um-th-sort:hover {
+  color: var(--iipe-primary);
+}
+
+.um-sort-ind {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  line-height: 1;
+}
+
+.um-meta {
+  color: var(--iipe-muted);
+  font-size: 0.85rem;
+}
+
+.um-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--iipe-border);
+}
+
+.um-pager-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.um-page-btn {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--iipe-border);
+  border-radius: 6px;
+  background: var(--iipe-surface);
+  color: var(--iipe-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.um-page-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--iipe-primary);
+  color: var(--iipe-primary);
+}
+
+.um-page-btn.active {
+  background: var(--iipe-primary);
+  border-color: var(--iipe-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.um-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.um-page-ellipsis {
+  padding: 0 4px;
+  color: var(--iipe-muted);
+}
+
+.um-page-size {
+  width: auto;
+  min-width: 72px;
+  height: 32px;
+  padding: 4px 8px;
+}

@@ -35,6 +35,11 @@ type SsoUser = {
   phCategory: string | null;
   nonInstituteEmail: string | null;
   emergencyPhone: string | null;
+  natureOfAdmission: string | null;
+  discipline: string | null;
+  admissionYear: string | null;
+  admissionSemester: string | null;
+  admissionCategory: string | null;
   isActive: boolean;
   isTest: boolean;
   avatar: string | null;
@@ -92,6 +97,11 @@ export default async function UsersPage() {
     phCategory: u.phCategory,
     nonInstituteEmail: u.nonInstituteEmail,
     emergencyPhone: u.emergencyPhone,
+    natureOfAdmission: u.natureOfAdmission,
+    discipline: u.discipline,
+    admissionYear: u.admissionYear,
+    admissionSemester: u.admissionSemester,
+    admissionCategory: u.admissionCategory,
     isActive: u.isActive,
     isTest: u.isTest,
     avatar: u.avatar,
