@@ -98,6 +98,11 @@ type Draft = {
   programmeId: string;
   courseId: string;
   guideId: string;
+  natureOfAdmission: string;
+  discipline: string;
+  admissionCategory: string;
+  admissionYear: string;
+  admissionSemester: string;
 };
 
 type ModalState = { mode: "add" } | { mode: "edit"; user: UserRow } | null;
@@ -181,7 +186,23 @@ const EMPTY_DRAFT: Draft = {
   programmeId: "",
   courseId: "",
   guideId: "",
+  natureOfAdmission: "",
+  discipline: "",
+  admissionCategory: "",
+  admissionYear: "",
+  admissionSemester: "",
 };
+
+const NATURE_OF_ADMISSION_OPTIONS = [
+  "Regular with Assistantship",
+  "Individual Fellowship",
+  "Sponsored (External)",
+  "Sponsored (Internal)",
+  "Sponsored (Part-time)",
+  "PhD Through Project",
+];
+
+const ADMISSION_CATEGORY_OPTIONS = ["GENERAL", "OBC", "OBC-NCL", "EWS", "SC", "ST"];
 
 function initials(name: string) {
   return name
@@ -453,6 +474,11 @@ export function UsersManager({
       body.employmentType = null;
       body.empNo = null;
     }
+    body.natureOfAdmission = null;
+    body.discipline = null;
+    body.admissionCategory = null;
+    body.admissionYear = null;
+    body.admissionSemester = null;
     if (draft.primaryRole === "STUDENT") {
       body.programmeId = draft.programmeId || null;
       body.courseId = draft.courseId || null;
@@ -463,6 +489,11 @@ export function UsersManager({
       body.programmeId = draft.programmeId || null;
       body.courseId = null;
       body.rollNo = draft.rollNo || null;
+      body.natureOfAdmission = draft.natureOfAdmission || null;
+      body.discipline = draft.discipline.trim() || null;
+      body.admissionCategory = draft.admissionCategory || null;
+      body.admissionYear = draft.admissionYear.trim() || null;
+      body.admissionSemester = draft.admissionSemester || null;
     } else {
       body.programmeId = null;
       body.courseId = null;
@@ -503,6 +534,11 @@ export function UsersManager({
       programmeId: user.programmeId ?? "",
       courseId: user.courseId ?? "",
       guideId: user.guideId ?? "",
+      natureOfAdmission: user.natureOfAdmission ?? "",
+      discipline: user.discipline ?? "",
+      admissionCategory: user.admissionCategory ?? "",
+      admissionYear: user.admissionYear ?? "",
+      admissionSemester: user.admissionSemester ?? "",
     });
     setModal({ mode: "edit", user });
   }
@@ -544,6 +580,14 @@ export function UsersManager({
     }
     if (draft.primaryRole === "SCHOLAR" && !draft.guideId) {
       setError("Select a guide for the scholar.");
+      return;
+    }
+    if (draft.primaryRole === "SCHOLAR" && !draft.natureOfAdmission) {
+      setError("Select the nature of admission — required for scholars.");
+      return;
+    }
+    if (draft.primaryRole === "SCHOLAR" && !draft.discipline.trim()) {
+      setError("Enter the choice of specialization — required for scholars.");
       return;
     }
     if (draft.nonInstituteEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.nonInstituteEmail.trim())) {
@@ -1438,6 +1482,92 @@ export function UsersManager({
                   ))}
                 </select>
               </div>
+            )}
+
+            {draft.primaryRole === "SCHOLAR" && (
+              <>
+                <div className="iipe-row" style={{ gap: 12 }}>
+                  <div className="iipe-field" style={{ flex: 1 }}>
+                    <label className="iipe-label" htmlFor="um-nature">
+                      Nature of admission <span className="iipe-muted">(required)</span>
+                    </label>
+                    <select
+                      id="um-nature"
+                      className="iipe-select"
+                      required
+                      value={draft.natureOfAdmission}
+                      onChange={(e) => setDraft({ ...draft, natureOfAdmission: e.target.value })}
+                    >
+                      <option value="">— Select nature of admission —</option>
+                      {NATURE_OF_ADMISSION_OPTIONS.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="iipe-field" style={{ flex: 1 }}>
+                    <label className="iipe-label" htmlFor="um-discipline">
+                      Choice of specialization <span className="iipe-muted">(required)</span>
+                    </label>
+                    <input
+                      id="um-discipline"
+                      className="iipe-input"
+                      required
+                      value={draft.discipline}
+                      onChange={(e) => setDraft({ ...draft, discipline: e.target.value })}
+                      placeholder="e.g. Petroleum Engineering"
+                    />
+                  </div>
+                </div>
+                <div className="iipe-row" style={{ gap: 12 }}>
+                  <div className="iipe-field" style={{ flex: 1 }}>
+                    <label className="iipe-label" htmlFor="um-adm-category">
+                      Admission category
+                    </label>
+                    <select
+                      id="um-adm-category"
+                      className="iipe-select"
+                      value={draft.admissionCategory}
+                      onChange={(e) => setDraft({ ...draft, admissionCategory: e.target.value })}
+                    >
+                      <option value="">— Select category —</option>
+                      {ADMISSION_CATEGORY_OPTIONS.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="iipe-field" style={{ flex: 1 }}>
+                    <label className="iipe-label" htmlFor="um-adm-year">
+                      Admission year
+                    </label>
+                    <input
+                      id="um-adm-year"
+                      className="iipe-input"
+                      value={draft.admissionYear}
+                      onChange={(e) => setDraft({ ...draft, admissionYear: e.target.value })}
+                      placeholder="e.g. 2024-2025"
+                    />
+                  </div>
+                  <div className="iipe-field" style={{ flex: 1 }}>
+                    <label className="iipe-label" htmlFor="um-adm-sem">
+                      Admission semester
+                    </label>
+                    <select
+                      id="um-adm-sem"
+                      className="iipe-select"
+                      value={draft.admissionSemester}
+                      onChange={(e) => setDraft({ ...draft, admissionSemester: e.target.value })}
+                    >
+                      <option value="">— Select semester —</option>
+                      <option value="AUTUMN">AUTUMN</option>
+                      <option value="SPRING">SPRING</option>
+                    </select>
+                  </div>
+                </div>
+              </>
             )}
 
             <div className="iipe-row" style={{ gap: 12 }}>
