@@ -7,6 +7,7 @@ import {
   MatrixUser,
   MatrixApp,
   MatrixGrant,
+  RoleRule,
   PRIMARY_ROLES,
   getRoleLabel,
 } from "./matrixTypes";
@@ -16,11 +17,13 @@ export function AccessMatrixInspector({
   users,
   applications,
   initialGrants,
+  initialRoleRules = [],
   initialApp,
 }: {
   users: MatrixUser[];
   applications: MatrixApp[];
   initialGrants: MatrixGrant[];
+  initialRoleRules?: RoleRule[];
   initialApp?: string;
 }) {
   const [grants, setGrants] = useState<MatrixGrant[]>(initialGrants);
@@ -58,6 +61,23 @@ export function AccessMatrixInspector({
     return grantMap.get(`${username.toLowerCase().trim()}:${clientId.toLowerCase().trim()}`) ?? null;
   }
 
+  // Role rules: inherited access, so the inspector reports what users can
+  // actually open rather than only the direct grants.
+  const roleRuleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of initialRoleRules) {
+      map.set(`${r.primaryRole.toLowerCase()}:${r.clientId.toLowerCase()}`, r.role || "USER");
+    }
+    return map;
+  }, [initialRoleRules]);
+
+  function effectiveRole(user: MatrixUser, clientId: string): { role: string; inherited: boolean } | null {
+    const direct = getGrantRole(user.username, clientId);
+    if (direct) return { role: direct, inherited: false };
+    const inherited = roleRuleMap.get(`${(user.primaryRole ?? "").toLowerCase()}:${clientId.toLowerCase()}`);
+    return inherited ? { role: inherited, inherited: true } : null;
+  }
+
   const appCounts = useMemo(() => {
     const totals = new Map<string, number>();
     const admins = new Map<string, number>();
@@ -67,25 +87,25 @@ export function AccessMatrixInspector({
     }
     for (const u of users) {
       for (const a of applications) {
-        const r = getGrantRole(u.username, a.clientId);
+        const r = effectiveRole(u, a.clientId)?.role ?? null;
         if (r) totals.set(a.clientId, (totals.get(a.clientId) ?? 0) + 1);
         if (r === "APP_ADMIN") admins.set(a.clientId, (admins.get(a.clientId) ?? 0) + 1);
       }
     }
     return { totals, admins };
-  }, [users, applications, grantMap]);
+  }, [users, applications, grantMap, roleRuleMap]);
 
   const inspectedAppStats = useMemo(() => {
     if (!inspectedApp) return { total: 0, admins: 0, regular: 0 };
     let admins = 0;
     let regular = 0;
     for (const u of users) {
-      const r = getGrantRole(u.username, inspectedApp.clientId);
+      const r = effectiveRole(u, inspectedApp.clientId)?.role ?? null;
       if (r === "APP_ADMIN") admins += 1;
       else if (r === "USER") regular += 1;
     }
     return { total: admins + regular, admins, regular };
-  }, [inspectedApp, users, grantMap]);
+  }, [inspectedApp, users, grantMap, roleRuleMap]);
 
   // Toggle single user
   async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
@@ -207,14 +227,14 @@ export function AccessMatrixInspector({
 
       if (filterRole !== "ALL" && u.primaryRole !== filterRole) return false;
 
-      const role = getGrantRole(u.username, inspectedApp.clientId);
+      const role = effectiveRole(u, inspectedApp.clientId)?.role ?? null;
       if (filterStatus === "ADMIN" && role !== "APP_ADMIN") return false;
       if (filterStatus === "USER" && role !== "USER") return false;
       if (filterStatus === "UNAUTHORIZED" && role !== null) return false;
 
       return true;
     });
-  }, [users, inspectedApp, searchQuery, filterRole, filterStatus, grantMap]);
+  }, [users, inspectedApp, searchQuery, filterRole, filterStatus, grantMap, roleRuleMap]);
 
   if (!inspectedApp) {
     return <div className="iipe-alert">No applications found.</div>;
@@ -302,7 +322,7 @@ export function AccessMatrixInspector({
           <div className="mx-role-rows">
             {PRIMARY_ROLES.map((pr) => {
               const roleUsers = users.filter((u) => u.primaryRole === pr.value);
-              const grantedRoleUsers = roleUsers.filter((u) => getGrantRole(u.username, inspectedApp.clientId) !== null);
+              const grantedRoleUsers = roleUsers.filter((u) => effectiveRole(u, inspectedApp.clientId) !== null);
               const percentage = roleUsers.length > 0 ? Math.round((grantedRoleUsers.length / roleUsers.length) * 100) : 0;
               const allGranted = roleUsers.length > 0 && grantedRoleUsers.length === roleUsers.length;
 
@@ -396,7 +416,9 @@ export function AccessMatrixInspector({
                 </tr>
               ) : (
                 displayedUsers.map((user) => {
-                  const role = getGrantRole(user.username, inspectedApp.clientId);
+                  const eff = effectiveRole(user, inspectedApp.clientId);
+                  const role = eff?.role ?? null;
+                  const inherited = eff?.inherited ?? false;
                   const isGranted = role !== null;
                   const isAppAdmin = role === "APP_ADMIN";
                   const key = `${user.username.toLowerCase().trim()}:${inspectedApp.clientId.toLowerCase().trim()}`;
@@ -413,16 +435,20 @@ export function AccessMatrixInspector({
                       <td>{user.departmentName || "—"}</td>
                       <td className="mx-center">
                         {isAppAdmin ? (
-                          <span className="iipe-badge accent">⭐ Admin</span>
+                          <span className="iipe-badge accent">⭐ Admin{inherited ? " · role" : ""}</span>
                         ) : isGranted ? (
-                          <span className="iipe-badge">✓ User</span>
+                          <span className="iipe-badge">✓ User{inherited ? " · role" : ""}</span>
                         ) : (
                           <span className="iipe-muted">—</span>
                         )}
                       </td>
                       <td className="mx-center">
                         <div className="mx-actions">
-                          {!isGranted ? (
+                          {inherited ? (
+                            <span className="iipe-muted" style={{ fontSize: "0.8rem" }}>
+                              Via the {getRoleLabel(user.primaryRole)} role rule
+                            </span>
+                          ) : !isGranted ? (
                             <>
                               <button
                                 type="button"

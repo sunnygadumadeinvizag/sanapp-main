@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
+import { accessibleApplications } from "@/lib/access";
 
 /**
  * GET — the signed-in portal user's own applications.
@@ -15,20 +15,9 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const apps = await prisma.application.findMany({
-    where: {
-      enabled: true,
-      grants: { some: { OR: [{ userId: user.sub }, { username: user.username }] } },
-    },
-    orderBy: [{ category: "asc" }, { name: "asc" }],
-    select: {
-      clientId: true,
-      name: true,
-      description: true,
-      url: true,
-      category: true,
-      openInNewTab: true,
-    },
+  const apps = await accessibleApplications({
+    userId: user.sub,
+    username: user.username,
   });
 
   return NextResponse.json({ apps });
@@ -51,21 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "username required" }, { status: 400 });
   }
 
-  const apps = await prisma.application.findMany({
-    where: {
-      enabled: true,
-      grants: { some: { OR: [{ userId: userId ?? undefined }, { username }] } },
-    },
-    orderBy: [{ category: "asc" }, { name: "asc" }],
-    select: {
-      clientId: true,
-      name: true,
-      description: true,
-      url: true,
-      category: true,
-      openInNewTab: true,
-    },
-  });
+  const apps = await accessibleApplications({ userId, username });
 
   return NextResponse.json({ apps });
 }

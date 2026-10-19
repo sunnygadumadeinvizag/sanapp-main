@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { MatrixNavTabs } from "../../../components/MatrixNavTabs";
 import { AccessMatrixAllocator } from "../../../components/AccessMatrixAllocator";
-import type { MatrixApp, MatrixGrant, MatrixUser, DepartmentOption } from "../../../components/matrixTypes";
+import type { MatrixApp, MatrixGrant, MatrixUser, DepartmentOption, RoleRule } from "../../../components/matrixTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +61,9 @@ export default async function AppMatrixAllocatorPage({
   const grants = await prisma.userApplication.findMany({
     include: { application: true },
   });
+  const roleGrantRows = await prisma.roleApplication.findMany({
+    include: { application: { select: { clientId: true } } },
+  });
 
   const matrixUsers: MatrixUser[] = ssoUsers.map((u) => ({
     id: u.id,
@@ -93,6 +96,12 @@ export default async function AppMatrixAllocatorPage({
     username: g.username,
     clientId: g.application.clientId,
     role: g.role || "USER",
+  }));
+
+  const roleRules: RoleRule[] = roleGrantRows.map((r) => ({
+    primaryRole: r.primaryRole,
+    clientId: r.application.clientId,
+    role: r.role || "USER",
   }));
 
   const departments: DepartmentOption[] = ssoDepartments.map((d) => ({
@@ -151,6 +160,7 @@ export default async function AppMatrixAllocatorPage({
           users={matrixUsers}
           applications={matrixApps}
           initialGrants={matrixGrants}
+          initialRoleRules={roleRules}
           departments={departments}
           initialRole={params.role}
         />

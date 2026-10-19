@@ -6,6 +6,7 @@ import {
   MatrixUser,
   MatrixApp,
   MatrixGrant,
+  RoleRule,
   DepartmentOption,
   PRIMARY_ROLES,
   getRoleLabel,
@@ -16,12 +17,14 @@ export function AccessMatrixGrid({
   users,
   applications,
   initialGrants,
+  initialRoleRules = [],
   departments,
   focusUsername,
 }: {
   users: MatrixUser[];
   applications: MatrixApp[];
   initialGrants: MatrixGrant[];
+  initialRoleRules?: RoleRule[];
   departments: DepartmentOption[];
   focusUsername?: string;
 }) {
@@ -56,6 +59,25 @@ export function AccessMatrixGrid({
     return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
+  // Role rules: access every member of a primary role inherits automatically.
+  const roleRuleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of initialRoleRules) map.set(`${r.primaryRole}:${r.clientId}`, r.role || "USER");
+    return map;
+  }, [initialRoleRules]);
+
+  function roleRuleFor(primaryRole: string, clientId: string): string | null {
+    return roleRuleMap.get(`${primaryRole}:${clientId}`) ?? null;
+  }
+
+  /** Direct grant wins; otherwise the rule for the user's primary role applies. */
+  function effectiveRole(user: MatrixUser, clientId: string): { role: string; inherited: boolean } | null {
+    const direct = getGrantRole(user.username, clientId);
+    if (direct) return { role: direct, inherited: false };
+    const inherited = roleRuleFor(user.primaryRole, clientId);
+    return inherited ? { role: inherited, inherited: true } : null;
+  }
+
   // Filtered users
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -75,27 +97,27 @@ export function AccessMatrixGrid({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
         if (hasAny) return false;
       } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
         const cid = filterAppGrant.replace("HAS_ADMIN_", "");
-        if (grantMap.get(`${u.username}:${cid}`) !== "APP_ADMIN") return false;
+        if (effectiveRole(u, cid)?.role !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!grantMap.has(`${u.username}:${cid}`)) return false;
+        if (!effectiveRole(u, cid)) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (grantMap.has(`${u.username}:${cid}`)) return false;
+        if (effectiveRole(u, cid)) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
 
       return true;
     });
-  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, applications]);
+  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, roleRuleMap, applications]);
 
   // Statistics
   const appStats = useMemo(() => {
@@ -157,10 +179,15 @@ export function AccessMatrixGrid({
 
   // Cycle a matrix cell: none -> USER -> APP_ADMIN -> none
   function cycleCell(user: MatrixUser, app: MatrixApp) {
-    const current = getGrantRole(user.username, app.clientId);
-    if (current === null) toggleSingle(user, app, true, "USER");
-    else if (current === "USER") toggleSingle(user, app, true, "APP_ADMIN");
-    else toggleSingle(user, app, false);
+    const current = effectiveRole(user, app.clientId);
+    if (!current) toggleSingle(user, app, true, "USER");
+    else if (!current.inherited && current.role === "USER") toggleSingle(user, app, true, "APP_ADMIN");
+    else if (current.inherited) {
+      setFeedback({
+        type: "info",
+        message: `${app.name} comes from the ${getRoleLabel(user.primaryRole)} role rule — change it in the Batch Allocator.`,
+      });
+    } else toggleSingle(user, app, false);
   }
 
   // Batch execution
@@ -297,8 +324,8 @@ export function AccessMatrixGrid({
       `"${(u.departmentName || "").replace(/"/g, '""')}"`,
       `"${(u.designation || "").replace(/"/g, '""')}"`,
       ...applications.map((a) => {
-        const r = getGrantRole(u.username, a.clientId);
-        return r ? `"${r}"` : '"NO"';
+        const eff = effectiveRole(u, a.clientId);
+        return eff ? `"${eff.role}${eff.inherited ? " (role)" : ""}"` : '"NO"';
       }),
     ]);
 
@@ -597,14 +624,20 @@ export function AccessMatrixGrid({
                         )}
                       </td>
                       {applications.map((app) => {
-                        const currentRole = getGrantRole(user.username, app.clientId);
+                        const eff = effectiveRole(user, app.clientId);
+                        const currentRole = eff?.role ?? null;
+                        const inherited = eff?.inherited ?? false;
                         const isBusy = busyKeys.has(`${user.username}:${app.clientId}`) || batchBusy;
                         const disabled = isBusy || !app.enabled;
-                        const stateClass = currentRole === "APP_ADMIN" ? "admin" : currentRole === "USER" ? "user" : "";
-                        const nextAction =
-                          currentRole === null ? "grant User access"
+                        const stateClass = inherited ? "role" : currentRole === "APP_ADMIN" ? "admin" : currentRole === "USER" ? "user" : "";
+                        const nextAction = inherited
+                          ? "change the role rule in the Batch Allocator"
+                          : currentRole === null ? "grant User access"
                           : currentRole === "USER" ? "promote to App Admin"
                           : "revoke access";
+                        const label = inherited
+                          ? `${currentRole === "APP_ADMIN" ? "App Admin" : "User"} via role rule`
+                          : currentRole === "APP_ADMIN" ? "App Admin" : currentRole === "USER" ? "User" : "No access";
                         return (
                           <td key={app.clientId} className="mx-center">
                             <button
@@ -612,10 +645,10 @@ export function AccessMatrixGrid({
                               className={`mx-cell-btn${stateClass ? ` ${stateClass}` : ""}`}
                               disabled={disabled}
                               onClick={() => cycleCell(user, app)}
-                              title={`${user.name} — ${app.name}: ${currentRole === "APP_ADMIN" ? "App Admin" : currentRole === "USER" ? "User" : "No access"}. Click to ${nextAction}.`}
-                              aria-label={`${user.name} — ${app.name}: ${currentRole === "APP_ADMIN" ? "App Admin" : currentRole === "USER" ? "User" : "No access"}. Click to ${nextAction}.`}
+                              title={`${user.name} — ${app.name}: ${label}. Click to ${nextAction}.`}
+                              aria-label={`${user.name} — ${app.name}: ${label}. Click to ${nextAction}.`}
                             >
-                              {currentRole === "APP_ADMIN" ? "★" : currentRole === "USER" ? "✓" : "—"}
+                              {inherited ? "◇" : currentRole === "APP_ADMIN" ? "★" : currentRole === "USER" ? "✓" : "—"}
                             </button>
                           </td>
                         );

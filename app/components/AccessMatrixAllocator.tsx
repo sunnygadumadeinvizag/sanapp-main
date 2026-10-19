@@ -6,6 +6,7 @@ import {
   MatrixUser,
   MatrixApp,
   MatrixGrant,
+  RoleRule,
   DepartmentOption,
   PRIMARY_ROLES,
   getRoleLabel,
@@ -16,16 +17,24 @@ export function AccessMatrixAllocator({
   users,
   applications,
   initialGrants,
+  initialRoleRules = [],
   departments,
   initialRole,
 }: {
   users: MatrixUser[];
   applications: MatrixApp[];
   initialGrants: MatrixGrant[];
+  initialRoleRules?: RoleRule[];
   departments: DepartmentOption[];
   initialRole?: string;
 }) {
   const [grants, setGrants] = useState<MatrixGrant[]>(initialGrants);
+  const [roleRules, setRoleRules] = useState<RoleRule[]>(initialRoleRules);
+  const [ruleRole, setRuleRole] = useState<string>(PRIMARY_ROLES[0]?.value ?? "GUEST");
+  const [ruleApps, setRuleApps] = useState<Set<string>>(new Set());
+  const [ruleRoleLevel, setRuleRoleLevel] = useState<"USER" | "APP_ADMIN">("USER");
+  const [ruleBusy, setRuleBusy] = useState(false);
+  const [ruleFeedback, setRuleFeedback] = useState<string | null>(null);
   const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "danger" | "info"; message: string } | null>(null);
@@ -52,6 +61,65 @@ export function AccessMatrixAllocator({
     return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
+  // A role rule is inherited access: shown as such, and never written as a
+  // per-user grant, so a new member of the role inherits it automatically.
+  const roleRuleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of roleRules) map.set(`${r.primaryRole}:${r.clientId}`, r.role || "USER");
+    return map;
+  }, [roleRules]);
+
+  function roleRuleFor(primaryRole: string, clientId: string): string | null {
+    return roleRuleMap.get(`${primaryRole}:${clientId}`) ?? null;
+  }
+
+  /** The access a user actually has: a direct grant first, then their role rule. */
+  function effectiveRole(user: MatrixUser, clientId: string): { role: string; inherited: boolean } | null {
+    const direct = getGrantRole(user.username, clientId);
+    if (direct) return { role: direct, inherited: false };
+    const inherited = roleRuleFor(user.primaryRole, clientId);
+    return inherited ? { role: inherited, inherited: true } : null;
+  }
+
+  async function saveRoleRules(add: boolean) {
+    if (ruleApps.size === 0 && add) {
+      setRuleFeedback("Pick at least one application for the role.");
+      return;
+    }
+    setRuleBusy(true);
+    setRuleFeedback(null);
+    const clientIds = [...ruleApps];
+    try {
+      const res = await fetch(apiPath("/api/grants/roles"), {
+        method: add ? "POST" : "DELETE",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          primaryRole: ruleRole,
+          clientIds,
+          ...(add ? { role: ruleRoleLevel } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Request failed");
+      }
+      setRoleRules((prev) => {
+        const rest = prev.filter((r) => !(r.primaryRole === ruleRole && clientIds.includes(r.clientId)));
+        return add ? [...rest, ...clientIds.map((clientId) => ({ primaryRole: ruleRole, clientId, role: ruleRoleLevel }))] : rest;
+      });
+      setRuleFeedback(
+        add
+          ? `Saved. Every ${getRoleLabel(ruleRole)} now has ${clientIds.length} app(s); new users inherit them automatically.`
+          : `Removed ${clientIds.length} app(s) from ${getRoleLabel(ruleRole)}.`
+      );
+    } catch (e) {
+      setRuleFeedback(e instanceof Error ? e.message : "Failed to save role rules.");
+    } finally {
+      setRuleBusy(false);
+    }
+  }
+
   // Filtered users
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -71,27 +139,27 @@ export function AccessMatrixAllocator({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => grantMap.has(`${u.username}:${a.clientId}`));
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
         if (hasAny) return false;
       } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
         const cid = filterAppGrant.replace("HAS_ADMIN_", "");
-        if (grantMap.get(`${u.username}:${cid}`) !== "APP_ADMIN") return false;
+        if (effectiveRole(u, cid)?.role !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!grantMap.has(`${u.username}:${cid}`)) return false;
+        if (!effectiveRole(u, cid)) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (grantMap.has(`${u.username}:${cid}`)) return false;
+        if (effectiveRole(u, cid)) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
 
       return true;
     });
-  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, applications]);
+  }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, roleRuleMap, applications]);
 
   // Single Toggle
   async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
@@ -256,6 +324,83 @@ export function AccessMatrixAllocator({
           </button>
         </div>
       )}
+
+      {/* Role Rules — allocate an app to a whole primary role once. Users added
+          to that role later inherit the apps automatically. */}
+      <div className="mx-card" style={{ marginBottom: 16 }}>
+        <div className="mx-card-title" style={{ marginBottom: 8 }}>Role rules (automatic access)</div>
+        <p className="iipe-muted" style={{ margin: "0 0 10px", fontSize: "0.85rem" }}>
+          Give a whole primary role access to an application once. Every current and future user with
+          that role inherits it — no need to allocate each new user. A direct grant on a user still
+          takes precedence over the role rule.
+        </p>
+        <div className="mx-filters">
+          <select
+            className="iipe-select"
+            aria-label="Role for the rule"
+            value={ruleRole}
+            onChange={(e) => setRuleRole(e.target.value)}
+          >
+            {PRIMARY_ROLES.map((pr) => (
+              <option key={pr.value} value={pr.value}>{pr.label}</option>
+            ))}
+          </select>
+          <select
+            className="iipe-select"
+            aria-label="Access level for the role"
+            value={ruleRoleLevel}
+            onChange={(e) => setRuleRoleLevel(e.target.value as "USER" | "APP_ADMIN")}
+          >
+            <option value="USER">As User</option>
+            <option value="APP_ADMIN">As App Admin</option>
+          </select>
+        </div>
+        <div className="mx-app-picker" style={{ marginTop: 8 }}>
+          {applications.map((app) => {
+            const isPicked = ruleApps.has(app.clientId);
+            const existing = roleRuleFor(ruleRole, app.clientId);
+            return (
+              <button
+                key={`rule_${app.clientId}`}
+                type="button"
+                className={`mx-chip${isPicked ? " picked" : ""}`}
+                aria-pressed={isPicked}
+                title={existing ? `Already granted to this role as ${existing}` : undefined}
+                onClick={() => {
+                  setRuleApps((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(app.clientId)) next.delete(app.clientId);
+                    else next.add(app.clientId);
+                    return next;
+                  });
+                }}
+              >
+                {isPicked ? "✓" : "+"} {app.name}
+                {existing ? " (on)" : ""}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mx-batch-actions" style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="iipe-btn primary"
+            disabled={ruleBusy || ruleApps.size === 0}
+            onClick={() => saveRoleRules(true)}
+          >
+            {ruleBusy ? "Saving…" : `Grant to ${getRoleLabel(ruleRole)} (${ruleApps.size})`}
+          </button>
+          <button
+            type="button"
+            className="iipe-btn danger"
+            disabled={ruleBusy || ruleApps.size === 0}
+            onClick={() => saveRoleRules(false)}
+          >
+            Remove from role ({ruleApps.size})
+          </button>
+          {ruleFeedback && <span className="iipe-muted">{ruleFeedback}</span>}
+        </div>
+      </div>
 
       {/* Role Quick Selector */}
       <div>
@@ -496,10 +641,10 @@ export function AccessMatrixAllocator({
                 const isSelected = selectedUsernames.has(user.username);
                 const userGrantedApps = applications
                   .map((a) => {
-                    const r = getGrantRole(user.username, a.clientId);
-                    return r ? { app: a, role: r } : null;
+                    const eff = effectiveRole(user, a.clientId);
+                    return eff ? { app: a, role: eff.role, inherited: eff.inherited } : null;
                   })
-                  .filter(Boolean) as { app: MatrixApp; role: string }[];
+                  .filter(Boolean) as { app: MatrixApp; role: string; inherited: boolean }[];
 
                 return (
                   <tr key={user.id} style={isSelected ? { background: "var(--iipe-primary-light)" } : undefined}>
@@ -530,31 +675,43 @@ export function AccessMatrixAllocator({
                         <span className="iipe-muted">—</span>
                       ) : (
                         <div className="mx-grant-pills">
-                          {userGrantedApps.map(({ app, role }) => {
+                          {userGrantedApps.map(({ app, role, inherited }) => {
                             const isAppAdmin = role === "APP_ADMIN";
                             const isBusy = busyKeys.has(`${user.username}:${app.clientId}`) || batchBusy;
                             return (
-                              <span key={app.clientId} className={`mx-grant-pill${isAppAdmin ? " admin" : ""}`}>
-                                <span>{isAppAdmin ? "⭐ " : ""}{app.name}</span>
-                                <button
-                                  type="button"
-                                  className="promote"
-                                  disabled={isBusy}
-                                  onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
-                                  title={isAppAdmin ? "Demote to regular User" : "Promote to App Admin"}
-                                >
-                                  {isAppAdmin ? "User" : "★"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="revoke"
-                                  disabled={isBusy}
-                                  onClick={() => toggleSingle(user, app, false)}
-                                  title={`Revoke ${app.name}`}
-                                  aria-label={`Revoke ${app.name}`}
-                                >
-                                  ✕
-                                </button>
+                              <span
+                                key={app.clientId}
+                                className={`mx-grant-pill${isAppAdmin ? " admin" : ""}`}
+                                title={inherited ? `Inherited from the ${getRoleLabel(user.primaryRole)} role rule` : undefined}
+                              >
+                                <span>{isAppAdmin ? "⭐ " : ""}{app.name}{inherited ? " · role" : ""}</span>
+                                {inherited ? (
+                                  // Inherited from the role rule: it cannot be
+                                  // revoked per user — change the rule above.
+                                  <span className="iipe-muted" style={{ fontSize: "0.7rem" }}>via role</span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="promote"
+                                      disabled={isBusy}
+                                      onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
+                                      title={isAppAdmin ? "Demote to regular User" : "Promote to App Admin"}
+                                    >
+                                      {isAppAdmin ? "User" : "★"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="revoke"
+                                      disabled={isBusy}
+                                      onClick={() => toggleSingle(user, app, false)}
+                                      title={`Revoke ${app.name}`}
+                                      aria-label={`Revoke ${app.name}`}
+                                    >
+                                      ✕
+                                    </button>
+                                  </>
+                                )}
                               </span>
                             );
                           })}

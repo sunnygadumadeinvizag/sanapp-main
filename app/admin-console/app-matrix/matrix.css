@@ -473,6 +473,13 @@
   background: var(--iipe-warning-light);
   color: var(--iipe-warning);
 }
+/* Inherited from a role rule: shown, but changed in the Batch Allocator. */
+.mx-cell-btn.role {
+  border: 1px solid var(--iipe-border);
+  background: var(--iipe-primary-light);
+  color: var(--iipe-primary);
+  cursor: help;
+}
 .mx-cell-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;

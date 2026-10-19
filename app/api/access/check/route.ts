@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { effectiveAccess } from "@/lib/access";
 
 /**
  * Called by independent applications (server-to-server) to answer:
  * "Is this user allowed to access this application, and what is their app role (USER vs APP_ADMIN)?"
+ *
+ * Access is a direct grant OR a rule for the user's primary role, so a user
+ * added to a role that has been allocated an app is allowed immediately.
  *
  * Body: { userId, username, clientId }
  * Header: x-app-key (shared key, must match MAIN_API_KEY)
@@ -35,16 +39,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ allowed: false, role: "USER" }, { status: 200 });
   }
 
-  const grant = await prisma.userApplication.findFirst({
-    where: {
-      applicationId: application.id,
-      OR: [{ userId: userId ?? undefined }, { username }],
-    },
+  const access = await effectiveAccess({
+    applicationId: application.id,
+    userId,
+    username,
   });
 
   return NextResponse.json({
-    allowed: grant !== null,
-    role: grant?.role ?? "USER",
+    allowed: access.allowed,
+    role: access.role,
+    source: access.source,
     application: { name: application.name },
   });
 }

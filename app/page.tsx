@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { apiPath, getPlatformNav, PageShell, SessionGuard, UserMenu } from "sanapp-common-ui";
 import { userNavItems } from "./components/adminNav";
 import { verifyMainSession } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
+import { accessibleApplications } from "@/lib/access";
 import { MyAppsView, type MyAppEntry } from "./components/MyAppsView";
 
 export const dynamic = "force-dynamic";
@@ -26,24 +26,14 @@ export default async function DashboardPage({
   }
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
 
-  // The home page IS the My Apps launcher — applications + grants come from
-  // sanapp_main_db and every user lands here right after SSO sign-in.
-  const grants = await prisma.userApplication.findMany({
-    where: { OR: [{ userId: me.sub }, { username: me.username }] },
-    include: { application: true },
+  // The home page IS the My Apps launcher — applications come from
+  // sanapp_main_db and every user lands here right after SSO sign-in. Access is
+  // a direct grant OR a rule for the user's primary role, so a user added to an
+  // allocated role sees the app without a per-user grant.
+  const apps: MyAppEntry[] = await accessibleApplications({
+    userId: me.sub,
+    username: me.username,
   });
-  const apps: MyAppEntry[] = grants
-    .map((g) => g.application)
-    .filter((a) => a.enabled)
-    .map((a) => ({
-      id: a.id,
-      clientId: a.clientId,
-      name: a.name,
-      description: a.description,
-      url: a.url,
-      category: a.category || "General",
-      openInNewTab: a.openInNewTab,
-    }));
 
   const navItems = getPlatformNav({
     launcher: true,

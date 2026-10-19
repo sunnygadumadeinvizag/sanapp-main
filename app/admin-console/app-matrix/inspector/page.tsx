@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 import { MatrixNavTabs } from "../../../components/MatrixNavTabs";
 import { AccessMatrixInspector } from "../../../components/AccessMatrixInspector";
-import type { MatrixApp, MatrixGrant, MatrixUser } from "../../../components/matrixTypes";
+import type { MatrixApp, MatrixGrant, MatrixUser, RoleRule } from "../../../components/matrixTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +88,15 @@ export default async function AppMatrixInspectorPage({
     role: g.role || "USER",
   }));
 
+  const roleGrantRows = await prisma.roleApplication.findMany({
+    include: { application: { select: { clientId: true } } },
+  });
+  const roleRules: RoleRule[] = roleGrantRows.map((r) => ({
+    primaryRole: r.primaryRole,
+    clientId: r.application.clientId,
+    role: r.role || "USER",
+  }));
+
   const navItems = getPlatformNav({
     launcher: true,
     mainBaseUrl: MAIN_BASE_URL,
@@ -139,6 +148,7 @@ export default async function AppMatrixInspectorPage({
           users={matrixUsers}
           applications={matrixApps}
           initialGrants={matrixGrants}
+          initialRoleRules={roleRules}
           initialApp={params.app}
         />
       )}

@@ -31,6 +31,13 @@ export type MatrixGrant = {
   role?: "USER" | "APP_ADMIN" | string;
 };
 
+/** A rule for a whole primary role: "this role may open this app". */
+export type RoleRule = {
+  primaryRole: string;
+  clientId: string;
+  role?: "USER" | "APP_ADMIN" | string;
+};
+
 export type DepartmentOption = {
   id: string;
   name: string;

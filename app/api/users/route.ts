@@ -36,18 +36,32 @@ export async function GET() {
   const data = await res.json().catch(() => ({}));
   const users: Array<Record<string, unknown>> = res.ok && Array.isArray(data.users) ? data.users : [];
 
-  // Count application grants per username from sanapp_main_db.
+  // Count the applications each user can actually open: their direct grants
+  // plus the rules for their primary role (a direct grant is counted once).
   const grants = await prisma.userApplication.findMany();
-  const countByUser = new Map<string, number>();
+  const roleRules = await prisma.roleApplication.findMany({
+    select: { primaryRole: true, applicationId: true },
+  });
+  const directByUser = new Map<string, Set<string>>();
   for (const g of grants) {
-    countByUser.set(g.username, (countByUser.get(g.username) ?? 0) + 1);
+    const key = g.username.toLowerCase();
+    const set = directByUser.get(key) ?? new Set<string>();
+    set.add(g.applicationId);
+    directByUser.set(key, set);
+  }
+  const appsByRole = new Map<string, Set<string>>();
+  for (const r of roleRules) {
+    const set = appsByRole.get(r.primaryRole) ?? new Set<string>();
+    set.add(r.applicationId);
+    appsByRole.set(r.primaryRole, set);
   }
 
   return NextResponse.json({
-    users: users.map((u) => ({
-      ...u,
-      appCount: countByUser.get(String(u.username)) ?? 0,
-    })),
+    users: users.map((u) => {
+      const effective = new Set(directByUser.get(String(u.username).toLowerCase()) ?? []);
+      for (const appId of appsByRole.get(String(u.primaryRole ?? "")) ?? []) effective.add(appId);
+      return { ...u, appCount: effective.size };
+    }),
   });
 }
 
