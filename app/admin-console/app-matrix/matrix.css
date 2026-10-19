@@ -363,6 +363,16 @@
   color: #fff;
   font-weight: 600;
 }
+/* A role rule already exists for this role/app. */
+.mx-chip.on {
+  border-color: color-mix(in srgb, var(--iipe-success) 45%, transparent);
+  background: var(--iipe-success-light);
+}
+.mx-chip.denied {
+  border-color: color-mix(in srgb, var(--iipe-danger) 45%, transparent);
+  background: var(--iipe-danger-light, #fdecec);
+  color: var(--iipe-danger);
+}
 .mx-batch-actions {
   display: flex;
   flex-wrap: wrap;
@@ -480,6 +490,25 @@
   color: var(--iipe-primary);
   cursor: help;
 }
+/* A winning DENY: explicitly blocked for this user, or by the role rule. */
+.mx-cell-btn.deny {
+  border: 1px solid color-mix(in srgb, var(--iipe-danger) 55%, transparent);
+  background: var(--iipe-danger-light, #fdecec);
+  color: var(--iipe-danger);
+}
+.mx-cell-btn.role-deny {
+  border: 1px dashed color-mix(in srgb, var(--iipe-danger) 45%, transparent);
+  background: transparent;
+  color: var(--iipe-danger);
+  cursor: help;
+}
+/* Role rule set to "override users" (role over user). */
+.mx-cell-btn.forced {
+  border: 1px solid color-mix(in srgb, var(--iipe-accent) 60%, transparent);
+  background: var(--iipe-warning-light);
+  color: var(--iipe-warning);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--iipe-warning) 35%, transparent);
+}
 .mx-cell-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -521,6 +550,14 @@
 .mx-btn-admin:hover {
   background: color-mix(in srgb, var(--iipe-accent) 88%, #000);
 }
+.mx-btn-deny {
+  background: var(--iipe-danger-light, #fdecec);
+  border-color: color-mix(in srgb, var(--iipe-danger) 55%, transparent);
+  color: var(--iipe-danger);
+}
+.mx-btn-deny:hover {
+  background: color-mix(in srgb, var(--iipe-danger) 12%, #fff);
+}
 
 /* ---------- Allocator: granted-app pills ---------- */
 .mx-grant-pills {
@@ -543,6 +580,15 @@
   background: var(--iipe-warning-light);
   border-color: color-mix(in srgb, var(--iipe-accent) 55%, transparent);
   color: var(--iipe-warning);
+}
+.mx-grant-pill.role {
+  background: var(--iipe-primary-light);
+  border-style: dashed;
+}
+.mx-grant-pill.deny {
+  background: var(--iipe-danger-light, #fdecec);
+  border-color: color-mix(in srgb, var(--iipe-danger) 45%, transparent);
+  color: var(--iipe-danger);
 }
 .mx-grant-pill button {
   border: none;

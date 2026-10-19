@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
     allowed: access.allowed,
     role: access.role,
     source: access.source,
+    effect: access.effect,
+    overrodeUser: access.overrodeUser,
     application: { name: application.name },
   });
 }

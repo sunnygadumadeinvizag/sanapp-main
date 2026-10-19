@@ -5,10 +5,18 @@ import { verifyMainSession } from "@/lib/session";
 
 /**
  * POST /api/grants/batch
+ *
  * Body options:
- * 1) { action: "grant" | "revoke" | "set_role", role?: "USER" | "APP_ADMIN", users: { userId?: string; username: string }[], clientIds: string[] }
- * 2) { action: "set_exact", role?: "USER" | "APP_ADMIN", users: { userId?: string; username: string }[], clientIds: string[] }
- * 3) { operations: { userId?: string; username: string; clientId: string; allowed: boolean; role?: string }[] }
+ * 1) { action: "grant" | "deny" | "revoke" | "set_role", role?: "USER" | "APP_ADMIN",
+ *      users: { userId?, username }[], clientIds: string[] }
+ *      - grant  -> direct ALLOW rows
+ *      - deny   -> direct DENY rows (explicit block; beats a non-overriding role rule)
+ *      - revoke -> delete direct rows (falls back to the role rule)
+ *      - set_role -> direct ALLOW rows with the given role
+ * 2) { action: "set_exact", role?, users, clientIds } — replace all direct rows
+ *      for these users with ALLOW rows on exactly clientIds.
+ * 3) { operations: { userId?, username, clientId, effect?, allowed?, role? }[] }
+ *      - `effect` ALLOW | DENY | CLEAR; `allowed` true=ALLOW, false=CLEAR.
  */
 export async function POST(request: NextRequest) {
   const store = await cookies();
@@ -23,11 +31,18 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const { action, role, users, clientIds, operations } = body as {
-    action?: "grant" | "revoke" | "set_exact" | "set_role";
+    action?: "grant" | "deny" | "revoke" | "set_exact" | "set_role";
     role?: "USER" | "APP_ADMIN";
     users?: { userId?: string | null; username: string }[];
     clientIds?: string[];
-    operations?: { userId?: string | null; username: string; clientId: string; allowed: boolean; role?: string }[];
+    operations?: {
+      userId?: string | null;
+      username: string;
+      clientId: string;
+      allowed?: boolean;
+      effect?: string;
+      role?: string;
+    }[];
   };
 
   const apps = await prisma.application.findMany();
@@ -38,36 +53,45 @@ export async function POST(request: NextRequest) {
   }
   const defaultRole = role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
 
+  const effectOf = (op: { effect?: string; allowed?: boolean }): "ALLOW" | "DENY" | "CLEAR" => {
+    const raw = String(op.effect ?? "").toUpperCase();
+    if (raw === "ALLOW" || raw === "DENY") return raw;
+    return op.allowed === true ? "ALLOW" : "CLEAR";
+  };
+
   if (Array.isArray(operations) && operations.length > 0) {
     await prisma.$transaction(async (tx) => {
       for (const op of operations) {
         const appId = appByClientId.get(op.clientId.toLowerCase());
         if (!appId) continue;
         const cleanUsername = op.username.trim().toLowerCase();
+        const effect = effectOf(op);
 
-        if (op.allowed) {
-          const opRole = op.role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
-          const existing = await tx.userApplication.findFirst({
-            where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
-          });
-          if (!existing) {
-            await tx.userApplication.create({
-              data: {
-                userId: op.userId ?? null,
-                username: cleanUsername,
-                applicationId: appId,
-                role: opRole,
-              },
-            });
-          } else {
-            await tx.userApplication.update({
-              where: { id: existing.id },
-              data: { role: opRole, userId: op.userId ?? existing.userId },
-            });
-          }
-        } else {
+        if (effect === "CLEAR") {
           await tx.userApplication.deleteMany({
             where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
+          });
+          continue;
+        }
+
+        const opRole = op.role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
+        const existing = await tx.userApplication.findFirst({
+          where: { username: { equals: cleanUsername, mode: "insensitive" }, applicationId: appId },
+        });
+        if (!existing) {
+          await tx.userApplication.create({
+            data: {
+              userId: op.userId ?? null,
+              username: cleanUsername,
+              applicationId: appId,
+              role: opRole,
+              effect,
+            },
+          });
+        } else {
+          await tx.userApplication.update({
+            where: { id: existing.id },
+            data: { role: opRole, effect, userId: op.userId ?? existing.userId },
           });
         }
       }
@@ -90,7 +114,8 @@ export async function POST(request: NextRequest) {
     const usernames = users.map((u) => u.username.trim().toLowerCase());
 
     await prisma.$transaction(async (tx) => {
-      if (action === "grant" || action === "set_role") {
+      if (action === "grant" || action === "deny" || action === "set_role") {
+        const effect = action === "deny" ? "DENY" : "ALLOW";
         for (const user of users) {
           const cleanUsername = user.username.trim().toLowerCase();
           for (const appId of targetAppIds) {
@@ -104,12 +129,13 @@ export async function POST(request: NextRequest) {
                   username: cleanUsername,
                   applicationId: appId,
                   role: defaultRole,
+                  effect,
                 },
               });
             } else {
               await tx.userApplication.update({
                 where: { id: existing.id },
-                data: { role: defaultRole, userId: user.userId ?? existing.userId },
+                data: { role: defaultRole, effect, userId: user.userId ?? existing.userId },
               });
             }
           }
@@ -136,6 +162,7 @@ export async function POST(request: NextRequest) {
                 username: cleanUsername,
                 applicationId: appId,
                 role: defaultRole,
+                effect: "ALLOW",
               },
             });
           }

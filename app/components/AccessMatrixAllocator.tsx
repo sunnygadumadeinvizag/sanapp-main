@@ -7,11 +7,38 @@ import {
   MatrixApp,
   MatrixGrant,
   RoleRule,
+  EffectiveDecision,
   DepartmentOption,
   PRIMARY_ROLES,
   getRoleLabel,
 } from "./matrixTypes";
 import "../admin-console/app-matrix/matrix.css";
+
+/**
+ * Resolve access exactly like src/lib/access.ts:
+ *   1. role rule with overrideUsers -> wins (role over user)
+ *   2. direct user row              -> wins (user over role)
+ *   3. role rule                    -> default
+ */
+function decide(
+  direct: { role: string; effect: string } | null,
+  rule: { role: string; effect: string; overrideUsers: boolean } | null
+): EffectiveDecision | null {
+  const effectOf = (v: string | undefined) => (String(v ?? "").toUpperCase() === "DENY" ? "DENY" : "ALLOW");
+  if (rule?.overrideUsers) {
+    const effect = effectOf(rule.effect);
+    return { role: rule.role, allowed: effect === "ALLOW", effect, source: "role", overrodeUser: true };
+  }
+  if (direct) {
+    const effect = effectOf(direct.effect);
+    return { role: direct.role, allowed: effect === "ALLOW", effect, source: "direct", overrodeUser: false };
+  }
+  if (rule) {
+    const effect = effectOf(rule.effect);
+    return { role: rule.role, allowed: effect === "ALLOW", effect, source: "role", overrodeUser: false };
+  }
+  return null;
+}
 
 export function AccessMatrixAllocator({
   users,
@@ -33,6 +60,8 @@ export function AccessMatrixAllocator({
   const [ruleRole, setRuleRole] = useState<string>(PRIMARY_ROLES[0]?.value ?? "GUEST");
   const [ruleApps, setRuleApps] = useState<Set<string>>(new Set());
   const [ruleRoleLevel, setRuleRoleLevel] = useState<"USER" | "APP_ADMIN">("USER");
+  const [ruleEffect, setRuleEffect] = useState<"ALLOW" | "DENY">("ALLOW");
+  const [ruleOverrideUsers, setRuleOverrideUsers] = useState<boolean>(false);
   const [ruleBusy, setRuleBusy] = useState(false);
   const [ruleFeedback, setRuleFeedback] = useState<string | null>(null);
   const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
@@ -52,33 +81,41 @@ export function AccessMatrixAllocator({
 
   // Lookup
   const grantMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const g of grants) map.set(`${g.username}:${g.clientId}`, g.role || "USER");
+    const map = new Map<string, { role: string; effect: string }>();
+    for (const g of grants) {
+      map.set(`${g.username}:${g.clientId}`, {
+        role: g.role || "USER",
+        effect: String(g.effect ?? "ALLOW").toUpperCase(),
+      });
+    }
     return map;
   }, [grants]);
 
-  function getGrantRole(username: string, clientId: string): string | null {
+  function getGrant(username: string, clientId: string) {
     return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
   // A role rule is inherited access: shown as such, and never written as a
   // per-user grant, so a new member of the role inherits it automatically.
   const roleRuleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of roleRules) map.set(`${r.primaryRole}:${r.clientId}`, r.role || "USER");
+    const map = new Map<string, { role: string; effect: string; overrideUsers: boolean }>();
+    for (const r of roleRules) {
+      map.set(`${r.primaryRole}:${r.clientId}`, {
+        role: r.role || "USER",
+        effect: String(r.effect ?? "ALLOW").toUpperCase(),
+        overrideUsers: r.overrideUsers === true,
+      });
+    }
     return map;
   }, [roleRules]);
 
-  function roleRuleFor(primaryRole: string, clientId: string): string | null {
+  function roleRuleFor(primaryRole: string, clientId: string) {
     return roleRuleMap.get(`${primaryRole}:${clientId}`) ?? null;
   }
 
-  /** The access a user actually has: a direct grant first, then their role rule. */
-  function effectiveRole(user: MatrixUser, clientId: string): { role: string; inherited: boolean } | null {
-    const direct = getGrantRole(user.username, clientId);
-    if (direct) return { role: direct, inherited: false };
-    const inherited = roleRuleFor(user.primaryRole, clientId);
-    return inherited ? { role: inherited, inherited: true } : null;
+  /** The access a user actually has, applying the full precedence rules. */
+  function effectiveRole(user: MatrixUser, clientId: string): EffectiveDecision | null {
+    return decide(getGrant(user.username, clientId), roleRuleFor(user.primaryRole, clientId));
   }
 
   async function saveRoleRules(add: boolean) {
@@ -97,7 +134,7 @@ export function AccessMatrixAllocator({
         body: JSON.stringify({
           primaryRole: ruleRole,
           clientIds,
-          ...(add ? { role: ruleRoleLevel } : {}),
+          ...(add ? { role: ruleRoleLevel, effect: ruleEffect, overrideUsers: ruleOverrideUsers } : {}),
         }),
       });
       if (!res.ok) {
@@ -106,15 +143,79 @@ export function AccessMatrixAllocator({
       }
       setRoleRules((prev) => {
         const rest = prev.filter((r) => !(r.primaryRole === ruleRole && clientIds.includes(r.clientId)));
-        return add ? [...rest, ...clientIds.map((clientId) => ({ primaryRole: ruleRole, clientId, role: ruleRoleLevel }))] : rest;
+        return add
+          ? [
+              ...rest,
+              ...clientIds.map((clientId) => ({
+                primaryRole: ruleRole,
+                clientId,
+                role: ruleRoleLevel,
+                effect: ruleEffect,
+                overrideUsers: ruleOverrideUsers,
+              })),
+            ]
+          : rest;
       });
+      const verb = ruleEffect === "DENY" ? "blocked" : "granted";
       setRuleFeedback(
         add
-          ? `Saved. Every ${getRoleLabel(ruleRole)} now has ${clientIds.length} app(s); new users inherit them automatically.`
+          ? `Saved. Every ${getRoleLabel(ruleRole)} is now ${verb} ${clientIds.length} app(s)${
+              ruleOverrideUsers ? " and the role overrides individual users" : ""
+            }. New users inherit this automatically.`
           : `Removed ${clientIds.length} app(s) from ${getRoleLabel(ruleRole)}.`
       );
     } catch (e) {
       setRuleFeedback(e instanceof Error ? e.message : "Failed to save role rules.");
+    } finally {
+      setRuleBusy(false);
+    }
+  }
+
+  /** Flip only `overrideUsers` for the selected role+apps, keeping the decision. */
+  async function setRoleOverride(overrideUsers: boolean) {
+    if (ruleApps.size === 0) {
+      setRuleFeedback("Pick at least one application first.");
+      return;
+    }
+    setRuleBusy(true);
+    setRuleFeedback(null);
+    const clientIds = [...ruleApps].filter((cid) => roleRuleFor(ruleRole, cid));
+    if (clientIds.length === 0) {
+      setRuleBusy(false);
+      setRuleFeedback("Those apps have no role rule yet — grant or block them first.");
+      return;
+    }
+    try {
+      // Send one request per app so each rule keeps its own decision/level;
+      // only the precedence flag changes.
+      for (const cid of clientIds) {
+        const current = roleRuleFor(ruleRole, cid)!;
+        const res = await fetch(apiPath("/api/grants/roles"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            primaryRole: ruleRole,
+            clientIds: [cid],
+            role: current.role,
+            effect: current.effect,
+            overrideUsers,
+          }),
+        });
+        if (!res.ok) throw new Error("Request failed");
+      }
+      setRoleRules((prev) =>
+        prev.map((r) =>
+          r.primaryRole === ruleRole && clientIds.includes(r.clientId) ? { ...r, overrideUsers } : r
+        )
+      );
+      setRuleFeedback(
+        overrideUsers
+          ? `Role now overrides individual users on ${clientIds.length} app(s).`
+          : `Individual user rows now win over the role on ${clientIds.length} app(s).`
+      );
+    } catch (e) {
+      setRuleFeedback(e instanceof Error ? e.message : "Failed to change precedence.");
     } finally {
       setRuleBusy(false);
     }
@@ -139,20 +240,27 @@ export function AccessMatrixAllocator({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId)?.allowed);
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId)?.allowed);
         if (hasAny) return false;
+      } else if (filterAppGrant === "DENIED") {
+        const hasDenied = applications.some((a) => {
+          const d = effectiveRole(u, a.clientId);
+          return d !== null && !d.allowed;
+        });
+        if (!hasDenied) return false;
       } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
         const cid = filterAppGrant.replace("HAS_ADMIN_", "");
-        if (effectiveRole(u, cid)?.role !== "APP_ADMIN") return false;
+        const d = effectiveRole(u, cid);
+        if (!d?.allowed || d.role !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!effectiveRole(u, cid)) return false;
+        if (!effectiveRole(u, cid)?.allowed) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (effectiveRole(u, cid)) return false;
+        if (effectiveRole(u, cid)?.allowed) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
@@ -161,8 +269,13 @@ export function AccessMatrixAllocator({
     });
   }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, roleRuleMap, applications]);
 
-  // Single Toggle
-  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
+  // Single decision: ALLOW, DENY (block), or CLEAR (fall back to role)
+  async function toggleSingle(
+    user: MatrixUser,
+    app: MatrixApp,
+    effect: "ALLOW" | "DENY" | "CLEAR",
+    role: "USER" | "APP_ADMIN" = "USER"
+  ) {
     const key = `${user.username}:${app.clientId}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
@@ -171,7 +284,8 @@ export function AccessMatrixAllocator({
 
     setGrants((prev) => {
       const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
+      if (effect === "CLEAR") return rest;
+      return [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role, effect }];
     });
 
     try {
@@ -183,11 +297,20 @@ export function AccessMatrixAllocator({
           userId: user.id,
           username: user.username,
           clientId: app.clientId,
-          allowed: checked,
+          effect,
           role,
         }),
       });
       if (!res.ok) throw new Error("Request failed");
+      setFeedback({
+        type: "success",
+        message:
+          effect === "DENY"
+            ? `Blocked ${app.name} for ${user.name} (@${user.username}).`
+            : effect === "CLEAR"
+              ? `Cleared the direct row for ${user.name} on ${app.name}; the role rule applies again.`
+              : `Granted ${app.name} to ${user.name} as ${role === "APP_ADMIN" ? "App Admin" : "User"}.`,
+      });
     } catch {
       setGrants(oldGrants);
       setFeedback({ type: "danger", message: `Failed to update access for @${user.username}` });
@@ -202,7 +325,7 @@ export function AccessMatrixAllocator({
 
   // Batch execution
   async function executeBatch(
-    action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "set_role",
+    action: "grant" | "deny" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "deny_all" | "set_role",
     targetRole: "USER" | "APP_ADMIN" = "USER"
   ) {
     if (selectedUsernames.size === 0) {
@@ -213,7 +336,7 @@ export function AccessMatrixAllocator({
     const selectedUsersList = users.filter((u) => selectedUsernames.has(u.username));
     let targetClientIds: string[] = [];
 
-    if (action === "grant_all" || action === "revoke_all") {
+    if (action === "grant_all" || action === "revoke_all" || action === "deny_all") {
       targetClientIds = applications.filter((a) => a.enabled).map((a) => a.clientId);
     } else {
       targetClientIds = Array.from(batchSelectedApps);
@@ -228,7 +351,13 @@ export function AccessMatrixAllocator({
     setFeedback(null);
 
     const apiAction =
-      action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
+      action === "grant_all"
+        ? "grant"
+        : action === "revoke_all"
+          ? "revoke"
+          : action === "deny_all"
+            ? "deny"
+            : action;
 
     try {
       const res = await fetch(apiPath("/api/grants/batch"), {
@@ -259,7 +388,7 @@ export function AccessMatrixAllocator({
           updated = updated.filter((g) => !selectedUserSet.has(g.username));
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
+              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "ALLOW" });
             }
           }
         } else if (apiAction === "grant" || apiAction === "set_role") {
@@ -267,9 +396,20 @@ export function AccessMatrixAllocator({
             for (const cid of targetClientIds) {
               const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
               if (idx >= 0) {
-                updated[idx] = { ...updated[idx], role: targetRole };
+                updated[idx] = { ...updated[idx], role: targetRole, effect: "ALLOW" };
               } else {
-                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "ALLOW" });
+              }
+            }
+          }
+        } else if (apiAction === "deny") {
+          for (const u of selectedUsersList) {
+            for (const cid of targetClientIds) {
+              const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], effect: "DENY" };
+              } else {
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "DENY" });
               }
             }
           }
@@ -280,7 +420,10 @@ export function AccessMatrixAllocator({
       const roleStr = targetRole === "APP_ADMIN" ? " as APP_ADMIN" : "";
       setFeedback({
         type: "success",
-        message: `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
+        message:
+          apiAction === "deny"
+            ? `Blocked ${selectedUsersList.length} user(s) on ${targetClientIds.length} app(s).`
+            : `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
       });
     } catch (err: any) {
       setFeedback({ type: "danger", message: err.message || "Failed to execute batch update." });
@@ -330,9 +473,11 @@ export function AccessMatrixAllocator({
       <div className="mx-card" style={{ marginBottom: 16 }}>
         <div className="mx-card-title" style={{ marginBottom: 8 }}>Role rules (automatic access)</div>
         <p className="iipe-muted" style={{ margin: "0 0 10px", fontSize: "0.85rem" }}>
-          Give a whole primary role access to an application once. Every current and future user with
-          that role inherits it — no need to allocate each new user. A direct grant on a user still
-          takes precedence over the role rule.
+          Grant or block an application for a whole primary role once. Every current and future user
+          with that role inherits it — no need to allocate each new user. By default a direct
+          per-user row wins over the role rule; tick <strong>Role overrides users</strong> to make the
+          role rule authoritative instead. A <strong>blocked</strong> user is denied even when their
+          role grants the app.
         </p>
         <div className="mx-filters">
           <select
@@ -347,25 +492,53 @@ export function AccessMatrixAllocator({
           </select>
           <select
             className="iipe-select"
+            aria-label="Decision for the role"
+            value={ruleEffect}
+            onChange={(e) => setRuleEffect(e.target.value as "ALLOW" | "DENY")}
+          >
+            <option value="ALLOW">Allow access</option>
+            <option value="DENY">Block access</option>
+          </select>
+          <select
+            className="iipe-select"
             aria-label="Access level for the role"
             value={ruleRoleLevel}
             onChange={(e) => setRuleRoleLevel(e.target.value as "USER" | "APP_ADMIN")}
+            disabled={ruleEffect === "DENY"}
           >
             <option value="USER">As User</option>
             <option value="APP_ADMIN">As App Admin</option>
           </select>
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.82rem", cursor: "pointer" }}
+            title="When ticked, this role rule wins over direct per-user rows (role over user)"
+          >
+            <input
+              type="checkbox"
+              checked={ruleOverrideUsers}
+              onChange={(e) => setRuleOverrideUsers(e.target.checked)}
+            />
+            Role overrides users
+          </label>
         </div>
         <div className="mx-app-picker" style={{ marginTop: 8 }}>
           {applications.map((app) => {
             const isPicked = ruleApps.has(app.clientId);
             const existing = roleRuleFor(ruleRole, app.clientId);
+            const existingLabel = existing
+              ? `${existing.effect === "DENY" ? "blocked" : existing.role}${
+                  existing.overrideUsers ? " · role overrides users" : ""
+                }`
+              : null;
             return (
               <button
                 key={`rule_${app.clientId}`}
                 type="button"
-                className={`mx-chip${isPicked ? " picked" : ""}`}
+                className={`mx-chip${isPicked ? " picked" : ""}${
+                  existing && !isPicked ? (existing.effect === "DENY" ? " denied" : " on") : ""
+                }`}
                 aria-pressed={isPicked}
-                title={existing ? `Already granted to this role as ${existing}` : undefined}
+                title={existingLabel ? `Currently ${existingLabel} for this role` : undefined}
                 onClick={() => {
                   setRuleApps((prev) => {
                     const next = new Set(prev);
@@ -375,8 +548,8 @@ export function AccessMatrixAllocator({
                   });
                 }}
               >
-                {isPicked ? "✓" : "+"} {app.name}
-                {existing ? " (on)" : ""}
+                {isPicked ? "✓" : existing ? (existing.effect === "DENY" ? "⊘" : "•") : "+"} {app.name}
+                {existing ? ` (${existing.effect === "DENY" ? "blocked" : "on"}${existing.overrideUsers ? " ⇉" : ""})` : ""}
               </button>
             );
           })}
@@ -384,11 +557,22 @@ export function AccessMatrixAllocator({
         <div className="mx-batch-actions" style={{ marginTop: 10 }}>
           <button
             type="button"
-            className="iipe-btn primary"
+            className={`iipe-btn ${ruleEffect === "DENY" ? "danger" : "primary"}`}
             disabled={ruleBusy || ruleApps.size === 0}
             onClick={() => saveRoleRules(true)}
           >
-            {ruleBusy ? "Saving…" : `Grant to ${getRoleLabel(ruleRole)} (${ruleApps.size})`}
+            {ruleBusy
+              ? "Saving…"
+              : `${ruleEffect === "DENY" ? "⊘ Block" : "Grant"} ${getRoleLabel(ruleRole)} (${ruleApps.size})`}
+          </button>
+          <button
+            type="button"
+            className="iipe-btn secondary"
+            disabled={ruleBusy || ruleApps.size === 0}
+            onClick={() => setRoleOverride(!ruleOverrideUsers)}
+            title="Apply the role-over-user precedence to the selected apps"
+          >
+            {ruleBusy ? "Saving…" : ruleOverrideUsers ? "⇉ Role wins" : "User wins"}
           </button>
           <button
             type="button"
@@ -503,8 +687,19 @@ export function AccessMatrixAllocator({
               className="iipe-btn danger"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("revoke")}
+              title="Remove direct rows so the role rule applies again"
             >
               {batchBusy ? "Processing…" : `− Revoke (${batchSelectedApps.size})`}
+            </button>
+
+            <button
+              type="button"
+              className="iipe-btn secondary mx-btn-deny"
+              disabled={batchBusy || batchSelectedApps.size === 0}
+              onClick={() => executeBatch("deny")}
+              title="Block these users even if their role grants the app (user over role)"
+            >
+              {batchBusy ? "Processing…" : `⊘ Block (${batchSelectedApps.size})`}
             </button>
 
             <span className="iipe-spacer" />
@@ -563,6 +758,7 @@ export function AccessMatrixAllocator({
             <option value="ALL">All Users</option>
             <option value="ANY">Has At Least 1 App</option>
             <option value="NONE">Has Zero Apps (No Access)</option>
+            <option value="DENIED">Has a Blocked App</option>
             <optgroup label="App Admin of">
               {applications.map((a) => (<option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>))}
             </optgroup>
@@ -639,12 +835,12 @@ export function AccessMatrixAllocator({
             ) : (
               filteredUsers.map((user) => {
                 const isSelected = selectedUsernames.has(user.username);
-                const userGrantedApps = applications
+                const userDecisions = applications
                   .map((a) => {
                     const eff = effectiveRole(user, a.clientId);
-                    return eff ? { app: a, role: eff.role, inherited: eff.inherited } : null;
+                    return eff ? { app: a, eff } : null;
                   })
-                  .filter(Boolean) as { app: MatrixApp; role: string; inherited: boolean }[];
+                  .filter(Boolean) as { app: MatrixApp; eff: EffectiveDecision }[];
 
                 return (
                   <tr key={user.id} style={isSelected ? { background: "var(--iipe-primary-light)" } : undefined}>
@@ -671,31 +867,99 @@ export function AccessMatrixAllocator({
                       )}
                     </td>
                     <td>
-                      {userGrantedApps.length === 0 ? (
+                      {userDecisions.length === 0 ? (
                         <span className="iipe-muted">—</span>
                       ) : (
                         <div className="mx-grant-pills">
-                          {userGrantedApps.map(({ app, role, inherited }) => {
-                            const isAppAdmin = role === "APP_ADMIN";
+                          {userDecisions.map(({ app, eff }) => {
+                            const isAppAdmin = eff.allowed && eff.role === "APP_ADMIN";
                             const isBusy = busyKeys.has(`${user.username}:${app.clientId}`) || batchBusy;
+                            const direct = getGrant(user.username, app.clientId);
+                            const fromRole = eff.source === "role";
+                            const locked = eff.overrodeUser;
+                            const denied = !eff.allowed;
+                            const pillClass = denied
+                              ? " deny"
+                              : fromRole
+                                ? " role"
+                                : isAppAdmin
+                                  ? " admin"
+                                  : "";
+                            const title = locked
+                              ? `The ${getRoleLabel(user.primaryRole)} role rule overrides individual users`
+                              : fromRole
+                                ? denied
+                                  ? `Blocked by the ${getRoleLabel(user.primaryRole)} role rule`
+                                  : `Inherited from the ${getRoleLabel(user.primaryRole)} role rule`
+                                : denied
+                                  ? "Explicitly blocked for this user"
+                                  : undefined;
+
                             return (
-                              <span
-                                key={app.clientId}
-                                className={`mx-grant-pill${isAppAdmin ? " admin" : ""}`}
-                                title={inherited ? `Inherited from the ${getRoleLabel(user.primaryRole)} role rule` : undefined}
-                              >
-                                <span>{isAppAdmin ? "⭐ " : ""}{app.name}{inherited ? " · role" : ""}</span>
-                                {inherited ? (
-                                  // Inherited from the role rule: it cannot be
-                                  // revoked per user — change the rule above.
+                              <span key={app.clientId} className={`mx-grant-pill${pillClass}`} title={title}>
+                                <span>
+                                  {denied ? "⊘ " : isAppAdmin ? "⭐ " : ""}
+                                  {app.name}
+                                  {fromRole ? (denied ? " · role block" : " · role") : denied ? " · blocked" : ""}
+                                  {eff.overrodeUser ? " ⇉" : ""}
+                                </span>
+                                {locked ? (
                                   <span className="iipe-muted" style={{ fontSize: "0.7rem" }}>via role</span>
+                                ) : denied ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="promote"
+                                      disabled={isBusy}
+                                      onClick={() => toggleSingle(user, app, "ALLOW", "USER")}
+                                      title="Give this user direct access (user over role)"
+                                    >
+                                      Allow
+                                    </button>
+                                    {direct && (
+                                      <button
+                                        type="button"
+                                        className="revoke"
+                                        disabled={isBusy}
+                                        onClick={() => toggleSingle(user, app, "CLEAR")}
+                                        title="Clear the direct block; the role rule applies again"
+                                        aria-label={`Clear block on ${app.name}`}
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </>
+                                ) : fromRole ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="promote"
+                                      disabled={isBusy}
+                                      onClick={() =>
+                                        toggleSingle(user, app, "ALLOW", isAppAdmin ? "APP_ADMIN" : "USER")
+                                      }
+                                      title="Make this user's access explicit (overrides the role rule)"
+                                    >
+                                      Pin
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="revoke"
+                                      disabled={isBusy}
+                                      onClick={() => toggleSingle(user, app, "DENY")}
+                                      title="Block this user even though the role grants the app"
+                                      aria-label={`Block ${app.name} for ${user.username}`}
+                                    >
+                                      ⊘
+                                    </button>
+                                  </>
                                 ) : (
                                   <>
                                     <button
                                       type="button"
                                       className="promote"
                                       disabled={isBusy}
-                                      onClick={() => toggleSingle(user, app, true, isAppAdmin ? "USER" : "APP_ADMIN")}
+                                      onClick={() => toggleSingle(user, app, "ALLOW", isAppAdmin ? "USER" : "APP_ADMIN")}
                                       title={isAppAdmin ? "Demote to regular User" : "Promote to App Admin"}
                                     >
                                       {isAppAdmin ? "User" : "★"}
@@ -704,9 +968,19 @@ export function AccessMatrixAllocator({
                                       type="button"
                                       className="revoke"
                                       disabled={isBusy}
-                                      onClick={() => toggleSingle(user, app, false)}
-                                      title={`Revoke ${app.name}`}
-                                      aria-label={`Revoke ${app.name}`}
+                                      onClick={() => toggleSingle(user, app, "DENY")}
+                                      title={`Block ${app.name} even if the role grants it`}
+                                      aria-label={`Block ${app.name}`}
+                                    >
+                                      ⊘
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="revoke"
+                                      disabled={isBusy}
+                                      onClick={() => toggleSingle(user, app, "CLEAR")}
+                                      title={`Clear the direct row for ${app.name}`}
+                                      aria-label={`Clear ${app.name}`}
                                     >
                                       ✕
                                     </button>

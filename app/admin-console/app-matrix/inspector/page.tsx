@@ -86,6 +86,7 @@ export default async function AppMatrixInspectorPage({
     username: g.username,
     clientId: g.application.clientId,
     role: g.role || "USER",
+    effect: g.effect || "ALLOW",
   }));
 
   const roleGrantRows = await prisma.roleApplication.findMany({
@@ -95,6 +96,8 @@ export default async function AppMatrixInspectorPage({
     primaryRole: r.primaryRole,
     clientId: r.application.clientId,
     role: r.role || "USER",
+    effect: r.effect || "ALLOW",
+    overrideUsers: r.overrideUsers,
   }));
 
   const navItems = getPlatformNav({

@@ -29,13 +29,30 @@ export type MatrixGrant = {
   username: string;
   clientId: string;
   role?: "USER" | "APP_ADMIN" | string;
+  /** ALLOW (default) or DENY — an explicit per-user block. */
+  effect?: "ALLOW" | "DENY" | string;
 };
 
-/** A rule for a whole primary role: "this role may open this app". */
+/** A rule for a whole primary role: "this role gets this decision on this app". */
 export type RoleRule = {
   primaryRole: string;
   clientId: string;
   role?: "USER" | "APP_ADMIN" | string;
+  /** ALLOW (default) or DENY for the whole role. */
+  effect?: "ALLOW" | "DENY" | string;
+  /** When true the role rule wins over direct per-user rows. */
+  overrideUsers?: boolean;
+};
+
+/** How a user's access was decided, mirroring src/lib/access.ts precedence. */
+export type EffectiveDecision = {
+  /** Effective role when allowed. */
+  role: "USER" | "APP_ADMIN" | string;
+  allowed: boolean;
+  effect: "ALLOW" | "DENY";
+  source: "direct" | "role";
+  /** True when a role rule set to override users decided the outcome. */
+  overrodeUser: boolean;
 };
 
 export type DepartmentOption = {

@@ -70,7 +70,9 @@ enum IssuePriority {
   URGENT
 }
 
-// A grant = "this user may open this application".
+// A direct per-user decision for one application: ALLOW (grant) or DENY
+// (explicit block). A direct row is an *override*: it beats the user's role
+// rule unless that role rule is marked `overrideUsers`.
 // userId comes from the SSO user registry; username is denormalized for display.
 model UserApplication {
   id            String      @id @default(uuid())
@@ -79,21 +81,30 @@ model UserApplication {
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   role          String      @default("USER") // USER | APP_ADMIN
+  effect        String      @default("ALLOW") // ALLOW | DENY
   grantedAt     DateTime    @default(now())
 
   @@unique([userId, applicationId])
 }
 
-// A role rule = "everyone whose primary role is this may open this
-// application", resolved at sign-in time rather than copied per user. Adding a
-// user to a role therefore grants the role's apps automatically, with no
-// backfill. A direct UserApplication grant always wins over a role rule.
+// A role rule = "everyone whose primary role is this gets this decision on
+// this application", resolved at sign-in time rather than copied per user.
+// Adding a user to a role therefore applies the rule automatically, with no
+// backfill.
+//
+// Precedence (see src/lib/access.ts):
+//   - `overrideUsers = true`  -> the role rule wins over any direct user row
+//                                (role over user).
+//   - `overrideUsers = false` -> a direct user row wins when present
+//                                (user over role); otherwise this rule applies.
 model RoleApplication {
   id            String      @id @default(uuid())
   primaryRole   String // STAFF_TEACHING | STAFF_NON_TEACHING | STUDENT | SCHOLAR | GUEST
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   role          String      @default("USER") // USER | APP_ADMIN
+  effect        String      @default("ALLOW") // ALLOW | DENY
+  overrideUsers Boolean     @default(false)
   grantedAt     DateTime    @default(now())
 
   @@unique([primaryRole, applicationId])

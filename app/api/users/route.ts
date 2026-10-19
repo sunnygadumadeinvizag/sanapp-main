@@ -36,31 +36,59 @@ export async function GET() {
   const data = await res.json().catch(() => ({}));
   const users: Array<Record<string, unknown>> = res.ok && Array.isArray(data.users) ? data.users : [];
 
-  // Count the applications each user can actually open: their direct grants
-  // plus the rules for their primary role (a direct grant is counted once).
-  const grants = await prisma.userApplication.findMany();
-  const roleRules = await prisma.roleApplication.findMany({
-    select: { primaryRole: true, applicationId: true },
+  // Count the applications each user can actually open, applying the same
+  // precedence as src/lib/access.ts: role-over-users rule, then direct row,
+  // then the role rule. A winning DENY removes the app from the count.
+  const grants = await prisma.userApplication.findMany({
+    select: { username: true, applicationId: true, effect: true, role: true },
   });
-  const directByUser = new Map<string, Set<string>>();
+  const roleRules = await prisma.roleApplication.findMany({
+    select: { primaryRole: true, applicationId: true, effect: true, overrideUsers: true },
+  });
+
+  const directByUser = new Map<string, Map<string, { effect: string; role: string }>>();
   for (const g of grants) {
     const key = g.username.toLowerCase();
-    const set = directByUser.get(key) ?? new Set<string>();
-    set.add(g.applicationId);
-    directByUser.set(key, set);
+    const byApp = directByUser.get(key) ?? new Map<string, { effect: string; role: string }>();
+    byApp.set(g.applicationId, { effect: g.effect, role: g.role });
+    directByUser.set(key, byApp);
   }
-  const appsByRole = new Map<string, Set<string>>();
+  const rulesByRole = new Map<
+    string,
+    Map<string, { effect: string; overrideUsers: boolean }>
+  >();
   for (const r of roleRules) {
-    const set = appsByRole.get(r.primaryRole) ?? new Set<string>();
-    set.add(r.applicationId);
-    appsByRole.set(r.primaryRole, set);
+    const byApp =
+      rulesByRole.get(r.primaryRole) ?? new Map<string, { effect: string; overrideUsers: boolean }>();
+    byApp.set(r.applicationId, { effect: r.effect, overrideUsers: r.overrideUsers });
+    rulesByRole.set(r.primaryRole, byApp);
   }
+
+  const isAllowed = (effect: string | undefined) => String(effect ?? "ALLOW").toUpperCase() !== "DENY";
 
   return NextResponse.json({
     users: users.map((u) => {
-      const effective = new Set(directByUser.get(String(u.username).toLowerCase()) ?? []);
-      for (const appId of appsByRole.get(String(u.primaryRole ?? "")) ?? []) effective.add(appId);
-      return { ...u, appCount: effective.size };
+      const username = String(u.username).toLowerCase();
+      const primaryRole = String(u.primaryRole ?? "");
+      const direct = directByUser.get(username);
+      const rules = rulesByRole.get(primaryRole);
+      const appIds = new Set<string>([...(direct?.keys() ?? []), ...(rules?.keys() ?? [])]);
+
+      let appCount = 0;
+      for (const appId of appIds) {
+        const rule = rules?.get(appId);
+        const row = direct?.get(appId);
+        const allowed = rule?.overrideUsers
+          ? isAllowed(rule.effect)
+          : row
+            ? isAllowed(row.effect)
+            : rule
+              ? isAllowed(rule.effect)
+              : false;
+        if (allowed) appCount += 1;
+      }
+
+      return { ...u, appCount };
     }),
   });
 }

@@ -7,11 +7,39 @@ import {
   MatrixApp,
   MatrixGrant,
   RoleRule,
+  EffectiveDecision,
   DepartmentOption,
   PRIMARY_ROLES,
   getRoleLabel,
 } from "./matrixTypes";
 import "../admin-console/app-matrix/matrix.css";
+
+/**
+ * Resolve access exactly like src/lib/access.ts:
+ *   1. role rule with overrideUsers -> wins (role over user)
+ *   2. direct user row              -> wins (user over role)
+ *   3. role rule                    -> default
+ * A winning DENY means no access.
+ */
+function decide(
+  direct: { role: string; effect: string } | null,
+  rule: { role: string; effect: string; overrideUsers: boolean } | null
+): EffectiveDecision | null {
+  const effectOf = (v: string | undefined) => (String(v ?? "").toUpperCase() === "DENY" ? "DENY" : "ALLOW");
+  if (rule?.overrideUsers) {
+    const effect = effectOf(rule.effect);
+    return { role: rule.role, allowed: effect === "ALLOW", effect, source: "role", overrodeUser: true };
+  }
+  if (direct) {
+    const effect = effectOf(direct.effect);
+    return { role: direct.role, allowed: effect === "ALLOW", effect, source: "direct", overrodeUser: false };
+  }
+  if (rule) {
+    const effect = effectOf(rule.effect);
+    return { role: rule.role, allowed: effect === "ALLOW", effect, source: "role", overrodeUser: false };
+  }
+  return null;
+}
 
 export function AccessMatrixGrid({
   users,
@@ -46,36 +74,42 @@ export function AccessMatrixGrid({
   const [filterAppGrant, setFilterAppGrant] = useState<string>("ALL");
   const [filterSelectionOnly, setFilterSelectionOnly] = useState<boolean>(false);
 
-  // Grant lookup: Map "username:clientId" -> role
+  // Direct user decisions: Map "username:clientId" -> { role, effect }
   const grantMap = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { role: string; effect: string }>();
     for (const g of grants) {
-      map.set(`${g.username}:${g.clientId}`, g.role || "USER");
+      map.set(`${g.username}:${g.clientId}`, {
+        role: g.role || "USER",
+        effect: String(g.effect ?? "ALLOW").toUpperCase(),
+      });
     }
     return map;
   }, [grants]);
 
-  function getGrantRole(username: string, clientId: string): string | null {
+  function getGrant(username: string, clientId: string) {
     return grantMap.get(`${username}:${clientId}`) ?? null;
   }
 
   // Role rules: access every member of a primary role inherits automatically.
   const roleRuleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of initialRoleRules) map.set(`${r.primaryRole}:${r.clientId}`, r.role || "USER");
+    const map = new Map<string, { role: string; effect: string; overrideUsers: boolean }>();
+    for (const r of initialRoleRules) {
+      map.set(`${r.primaryRole}:${r.clientId}`, {
+        role: r.role || "USER",
+        effect: String(r.effect ?? "ALLOW").toUpperCase(),
+        overrideUsers: r.overrideUsers === true,
+      });
+    }
     return map;
   }, [initialRoleRules]);
 
-  function roleRuleFor(primaryRole: string, clientId: string): string | null {
+  function roleRuleFor(primaryRole: string, clientId: string) {
     return roleRuleMap.get(`${primaryRole}:${clientId}`) ?? null;
   }
 
-  /** Direct grant wins; otherwise the rule for the user's primary role applies. */
-  function effectiveRole(user: MatrixUser, clientId: string): { role: string; inherited: boolean } | null {
-    const direct = getGrantRole(user.username, clientId);
-    if (direct) return { role: direct, inherited: false };
-    const inherited = roleRuleFor(user.primaryRole, clientId);
-    return inherited ? { role: inherited, inherited: true } : null;
+  /** Full precedence-aware decision (direct vs role, ALLOW vs DENY). */
+  function effectiveRole(user: MatrixUser, clientId: string): EffectiveDecision | null {
+    return decide(getGrant(user.username, clientId), roleRuleFor(user.primaryRole, clientId));
   }
 
   // Filtered users
@@ -97,20 +131,27 @@ export function AccessMatrixGrid({
       if (filterDepartment !== "ALL" && u.departmentId !== filterDepartment && u.departmentName !== filterDepartment) return false;
 
       if (filterAppGrant === "ANY") {
-        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId)?.allowed);
         if (!hasAny) return false;
       } else if (filterAppGrant === "NONE") {
-        const hasAny = applications.some((a) => effectiveRole(u, a.clientId) !== null);
+        const hasAny = applications.some((a) => effectiveRole(u, a.clientId)?.allowed);
         if (hasAny) return false;
+      } else if (filterAppGrant === "DENIED") {
+        const hasDenied = applications.some((a) => {
+          const d = effectiveRole(u, a.clientId);
+          return d !== null && !d.allowed;
+        });
+        if (!hasDenied) return false;
       } else if (filterAppGrant.startsWith("HAS_ADMIN_")) {
         const cid = filterAppGrant.replace("HAS_ADMIN_", "");
-        if (effectiveRole(u, cid)?.role !== "APP_ADMIN") return false;
+        const d = effectiveRole(u, cid);
+        if (!d?.allowed || d.role !== "APP_ADMIN") return false;
       } else if (filterAppGrant.startsWith("HAS_")) {
         const cid = filterAppGrant.replace("HAS_", "");
-        if (!effectiveRole(u, cid)) return false;
+        if (!effectiveRole(u, cid)?.allowed) return false;
       } else if (filterAppGrant.startsWith("MISSING_")) {
         const cid = filterAppGrant.replace("MISSING_", "");
-        if (effectiveRole(u, cid)) return false;
+        if (effectiveRole(u, cid)?.allowed) return false;
       }
 
       if (filterSelectionOnly && !selectedUsernames.has(u.username)) return false;
@@ -119,27 +160,38 @@ export function AccessMatrixGrid({
     });
   }, [users, searchQuery, filterPrimaryRole, filterDepartment, filterAppGrant, filterSelectionOnly, selectedUsernames, grantMap, roleRuleMap, applications]);
 
-  // Statistics
+  // Statistics (effective access, so role-inherited and overrides are counted)
   const appStats = useMemo(() => {
     const totalGrants: Record<string, number> = {};
     const adminGrants: Record<string, number> = {};
+    const denied: Record<string, number> = {};
     for (const a of applications) {
       totalGrants[a.clientId] = 0;
       adminGrants[a.clientId] = 0;
+      denied[a.clientId] = 0;
     }
-    for (const g of grants) {
-      if (totalGrants[g.clientId] !== undefined) {
-        totalGrants[g.clientId] += 1;
-        if (g.role === "APP_ADMIN") {
-          adminGrants[g.clientId] += 1;
+    for (const u of users) {
+      for (const a of applications) {
+        const d = effectiveRole(u, a.clientId);
+        if (!d) continue;
+        if (d.allowed) {
+          totalGrants[a.clientId] += 1;
+          if (d.role === "APP_ADMIN") adminGrants[a.clientId] += 1;
+        } else {
+          denied[a.clientId] += 1;
         }
       }
     }
-    return { totalGrants, adminGrants };
-  }, [applications, grants]);
+    return { totalGrants, adminGrants, denied };
+  }, [applications, users, grantMap, roleRuleMap]);
 
-  // Single Toggle (Grant/Revoke or change role)
-  async function toggleSingle(user: MatrixUser, app: MatrixApp, checked: boolean, role: "USER" | "APP_ADMIN" = "USER") {
+  // Single decision: ALLOW, DENY, or CLEAR (remove the direct row, fall back to role)
+  async function toggleSingle(
+    user: MatrixUser,
+    app: MatrixApp,
+    effect: "ALLOW" | "DENY" | "CLEAR",
+    role: "USER" | "APP_ADMIN" = "USER"
+  ) {
     const key = `${user.username}:${app.clientId}`;
     setBusyKeys((prev) => new Set(prev).add(key));
     setFeedback(null);
@@ -148,7 +200,8 @@ export function AccessMatrixGrid({
 
     setGrants((prev) => {
       const rest = prev.filter((g) => !(g.clientId === app.clientId && g.username === user.username));
-      return checked ? [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role }] : rest;
+      if (effect === "CLEAR") return rest;
+      return [...rest, { userId: user.id, username: user.username, clientId: app.clientId, role, effect }];
     });
 
     try {
@@ -160,7 +213,7 @@ export function AccessMatrixGrid({
           userId: user.id,
           username: user.username,
           clientId: app.clientId,
-          allowed: checked,
+          effect,
           role,
         }),
       });
@@ -177,22 +230,53 @@ export function AccessMatrixGrid({
     }
   }
 
-  // Cycle a matrix cell: none -> USER -> APP_ADMIN -> none
+  /**
+   * Cycle one cell through the explicit states. A role rule that overrides
+   * users is authoritative, so the cell is read-only until it is changed in
+   * the Batch Allocator.
+   *
+   *   none/blocked-by-role -> direct Allow (User)
+   *   direct Allow User    -> direct Allow (App Admin)
+   *   direct Allow Admin   -> direct Deny (block this user)
+   *   direct Deny          -> clear (fall back to the role rule / no access)
+   */
   function cycleCell(user: MatrixUser, app: MatrixApp) {
-    const current = effectiveRole(user, app.clientId);
-    if (!current) toggleSingle(user, app, true, "USER");
-    else if (!current.inherited && current.role === "USER") toggleSingle(user, app, true, "APP_ADMIN");
-    else if (current.inherited) {
+    const direct = getGrant(user.username, app.clientId);
+    const rule = roleRuleFor(user.primaryRole, app.clientId);
+
+    if (rule?.overrideUsers) {
       setFeedback({
         type: "info",
-        message: `${app.name} comes from the ${getRoleLabel(user.primaryRole)} role rule — change it in the Batch Allocator.`,
+        message: `${app.name} is decided by the ${getRoleLabel(user.primaryRole)} role rule, which is set to override individual users. Change it in the Batch Allocator.`,
       });
-    } else toggleSingle(user, app, false);
+      return;
+    }
+
+    if (direct) {
+      if (String(direct.effect).toUpperCase() === "DENY") {
+        toggleSingle(user, app, "ALLOW", "USER");
+      } else if (direct.role === "USER") {
+        toggleSingle(user, app, "ALLOW", "APP_ADMIN");
+      } else {
+        toggleSingle(user, app, "CLEAR");
+      }
+      return;
+    }
+
+    if (rule && String(rule.effect).toUpperCase() === "DENY") {
+      // This role is blocked; give this one person access (user over role).
+      toggleSingle(user, app, "ALLOW", "USER");
+    } else if (rule) {
+      // Inherited from the role; block this one person (user over role).
+      toggleSingle(user, app, "DENY");
+    } else {
+      toggleSingle(user, app, "ALLOW", "USER");
+    }
   }
 
   // Batch execution
   async function executeBatch(
-    action: "grant" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "set_role",
+    action: "grant" | "deny" | "revoke" | "set_exact" | "grant_all" | "revoke_all" | "deny_all" | "set_role",
     targetRole: "USER" | "APP_ADMIN" = "USER"
   ) {
     if (selectedUsernames.size === 0) {
@@ -203,7 +287,7 @@ export function AccessMatrixGrid({
     const selectedUsersList = users.filter((u) => selectedUsernames.has(u.username));
     let targetClientIds: string[] = [];
 
-    if (action === "grant_all" || action === "revoke_all") {
+    if (action === "grant_all" || action === "revoke_all" || action === "deny_all") {
       targetClientIds = applications.filter((a) => a.enabled).map((a) => a.clientId);
     } else {
       targetClientIds = Array.from(batchSelectedApps);
@@ -218,7 +302,13 @@ export function AccessMatrixGrid({
     setFeedback(null);
 
     const apiAction =
-      action === "grant_all" ? "grant" : action === "revoke_all" ? "revoke" : action;
+      action === "grant_all"
+        ? "grant"
+        : action === "revoke_all"
+          ? "revoke"
+          : action === "deny_all"
+            ? "deny"
+            : action;
 
     try {
       const res = await fetch(apiPath("/api/grants/batch"), {
@@ -249,7 +339,7 @@ export function AccessMatrixGrid({
           updated = updated.filter((g) => !selectedUserSet.has(g.username));
           for (const u of selectedUsersList) {
             for (const cid of targetClientIds) {
-              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
+              updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "ALLOW" });
             }
           }
         } else if (apiAction === "grant" || apiAction === "set_role") {
@@ -257,9 +347,20 @@ export function AccessMatrixGrid({
             for (const cid of targetClientIds) {
               const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
               if (idx >= 0) {
-                updated[idx] = { ...updated[idx], role: targetRole };
+                updated[idx] = { ...updated[idx], role: targetRole, effect: "ALLOW" };
               } else {
-                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole });
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "ALLOW" });
+              }
+            }
+          }
+        } else if (apiAction === "deny") {
+          for (const u of selectedUsersList) {
+            for (const cid of targetClientIds) {
+              const idx = updated.findIndex((g) => g.username === u.username && g.clientId === cid);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], effect: "DENY" };
+              } else {
+                updated.push({ userId: u.id, username: u.username, clientId: cid, role: targetRole, effect: "DENY" });
               }
             }
           }
@@ -270,7 +371,10 @@ export function AccessMatrixGrid({
       const roleStr = targetRole === "APP_ADMIN" ? " as APP_ADMIN" : "";
       setFeedback({
         type: "success",
-        message: `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
+        message:
+          apiAction === "deny"
+            ? `Blocked ${selectedUsersList.length} user(s) on ${targetClientIds.length} app(s).`
+            : `Successfully updated ${selectedUsersList.length} user(s) across ${targetClientIds.length} app(s)${roleStr}.`,
       });
     } catch (err: any) {
       setFeedback({ type: "danger", message: err.message || "Failed to execute batch update." });
@@ -324,8 +428,11 @@ export function AccessMatrixGrid({
       `"${(u.departmentName || "").replace(/"/g, '""')}"`,
       `"${(u.designation || "").replace(/"/g, '""')}"`,
       ...applications.map((a) => {
-        const eff = effectiveRole(u, a.clientId);
-        return eff ? `"${eff.role}${eff.inherited ? " (role)" : ""}"` : '"NO"';
+        const d = effectiveRole(u, a.clientId);
+        if (!d) return '"NO"';
+        const label = d.allowed ? (d.role === "APP_ADMIN" ? "APP_ADMIN" : "USER") : "DENIED";
+        const via = d.source === "role" ? (d.overrodeUser ? " (role override)" : " (role)") : "";
+        return `"${label}${via}"`;
       }),
     ]);
 
@@ -436,8 +543,19 @@ export function AccessMatrixGrid({
               className="iipe-btn danger"
               disabled={batchBusy || batchSelectedApps.size === 0}
               onClick={() => executeBatch("revoke")}
+              title="Remove the direct row so the role rule applies again"
             >
               {batchBusy ? "Processing…" : `− Revoke (${batchSelectedApps.size})`}
+            </button>
+
+            <button
+              type="button"
+              className="iipe-btn secondary mx-btn-deny"
+              disabled={batchBusy || batchSelectedApps.size === 0}
+              onClick={() => executeBatch("deny")}
+              title="Block these users even if their role grants the app (user over role)"
+            >
+              {batchBusy ? "Processing…" : `⊘ Block (${batchSelectedApps.size})`}
             </button>
 
             <button
@@ -498,6 +616,7 @@ export function AccessMatrixGrid({
             <option value="ALL">All Users</option>
             <option value="ANY">Has At Least 1 App</option>
             <option value="NONE">Has Zero Apps (No Access)</option>
+            <option value="DENIED">Has a Blocked App</option>
             <optgroup label="App Admin for Application">
               {applications.map((a) => (
                 <option key={`has_admin_${a.clientId}`} value={`HAS_ADMIN_${a.clientId}`}>⭐ Admin of: {a.name}</option>
@@ -561,6 +680,10 @@ export function AccessMatrixGrid({
           <span className="mx-cell-btn" aria-hidden>—</span> no access
           <span className="mx-cell-btn user" aria-hidden>✓</span> user
           <span className="mx-cell-btn admin" aria-hidden>★</span> app admin
+          <span className="mx-cell-btn deny" aria-hidden>⊘</span> blocked for user
+          <span className="mx-cell-btn role" aria-hidden>◇</span> via role
+          <span className="mx-cell-btn role-deny" aria-hidden>⊘</span> blocked by role
+          <span className="mx-cell-btn forced" aria-hidden>⇉</span> role overrides user
         </div>
         <div className="mx-table-wrap">
           <table className="iipe-table mx-table mx-grid-table">
@@ -582,12 +705,14 @@ export function AccessMatrixGrid({
                 {applications.map((app) => {
                   const totalCount = appStats.totalGrants[app.clientId] || 0;
                   const adminCount = appStats.adminGrants[app.clientId] || 0;
+                  const deniedCount = appStats.denied[app.clientId] || 0;
                   return (
                     <th key={app.clientId} className="mx-center" style={{ minWidth: 110, padding: "10px 8px" }}>
                       <div>{app.name}</div>
                       <div className="iipe-muted" style={{ fontSize: "0.7rem", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
                         {totalCount}/{users.length}
                         {adminCount > 0 && <span title={`${adminCount} App Admin(s)`}> · ★{adminCount}</span>}
+                        {deniedCount > 0 && <span title={`${deniedCount} blocked`}> · ⊘{deniedCount}</span>}
                       </div>
                     </th>
                   );
@@ -626,18 +751,42 @@ export function AccessMatrixGrid({
                       {applications.map((app) => {
                         const eff = effectiveRole(user, app.clientId);
                         const currentRole = eff?.role ?? null;
-                        const inherited = eff?.inherited ?? false;
+                        const allowed = eff?.allowed ?? false;
+                        const fromRole = eff?.source === "role";
+                        const overrode = eff?.overrodeUser ?? false;
+                        const denied = eff !== null && !eff.allowed;
                         const isBusy = busyKeys.has(`${user.username}:${app.clientId}`) || batchBusy;
                         const disabled = isBusy || !app.enabled;
-                        const stateClass = inherited ? "role" : currentRole === "APP_ADMIN" ? "admin" : currentRole === "USER" ? "user" : "";
-                        const nextAction = inherited
+                        const stateClass = denied
+                          ? fromRole ? "role-deny" : "deny"
+                          : overrode ? "forced"
+                          : fromRole ? "role"
+                          : currentRole === "APP_ADMIN" ? "admin"
+                          : currentRole === "USER" ? "user"
+                          : "";
+                        const nextAction = overrode
                           ? "change the role rule in the Batch Allocator"
-                          : currentRole === null ? "grant User access"
-                          : currentRole === "USER" ? "promote to App Admin"
-                          : "revoke access";
-                        const label = inherited
-                          ? `${currentRole === "APP_ADMIN" ? "App Admin" : "User"} via role rule`
-                          : currentRole === "APP_ADMIN" ? "App Admin" : currentRole === "USER" ? "User" : "No access";
+                          : denied
+                            ? "give this user direct access (user over role)"
+                            : !eff
+                              ? "grant User access"
+                              : fromRole
+                                ? "block this user (user over role)"
+                                : currentRole === "USER"
+                                  ? "promote to App Admin"
+                                  : "clear the direct grant (fall back to role)";
+                        const label = denied
+                          ? fromRole ? "Blocked by role rule" : "Blocked for this user"
+                          : !eff
+                            ? "No access"
+                            : `${currentRole === "APP_ADMIN" ? "App Admin" : "User"}${fromRole ? " via role rule" : ""}${overrode ? " (role overrides user)" : ""}`;
+                        const glyph = denied
+                          ? "⊘"
+                          : overrode ? "⇉"
+                          : !eff ? "—"
+                          : fromRole ? "◇"
+                          : currentRole === "APP_ADMIN" ? "★"
+                          : "✓";
                         return (
                           <td key={app.clientId} className="mx-center">
                             <button
@@ -648,7 +797,7 @@ export function AccessMatrixGrid({
                               title={`${user.name} — ${app.name}: ${label}. Click to ${nextAction}.`}
                               aria-label={`${user.name} — ${app.name}: ${label}. Click to ${nextAction}.`}
                             >
-                              {inherited ? "◇" : currentRole === "APP_ADMIN" ? "★" : currentRole === "USER" ? "✓" : "—"}
+                              {glyph}
                             </button>
                           </td>
                         );

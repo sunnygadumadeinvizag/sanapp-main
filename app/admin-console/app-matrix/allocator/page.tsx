@@ -96,12 +96,15 @@ export default async function AppMatrixAllocatorPage({
     username: g.username,
     clientId: g.application.clientId,
     role: g.role || "USER",
+    effect: g.effect || "ALLOW",
   }));
 
   const roleRules: RoleRule[] = roleGrantRows.map((r) => ({
     primaryRole: r.primaryRole,
     clientId: r.application.clientId,
     role: r.role || "USER",
+    effect: r.effect || "ALLOW",
+    overrideUsers: r.overrideUsers,
   }));
 
   const departments: DepartmentOption[] = ssoDepartments.map((d) => ({

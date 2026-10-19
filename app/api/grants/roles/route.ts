@@ -4,15 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { verifyMainSession } from "@/lib/session";
 
 /**
- * Role rules — "everyone whose primary role is X may open app Y".
+ * Role rules — "everyone whose primary role is X gets this decision on app Y".
  *
  * GET    — every rule, with the application it points at.
- * POST   { primaryRole, clientIds: string[], role?: "USER" | "APP_ADMIN" }
+ * POST   { primaryRole, clientIds: string[], role?, effect?, overrideUsers? }
  *        — add or update the rules for one role (one request per role).
+ *        `effect` is ALLOW (default) or DENY; `overrideUsers` makes the rule
+ *        win over direct per-user rows (role over user).
  * DELETE { primaryRole, clientIds: string[] } — remove the rules for a role.
  *
  * Super admin only. Rules take effect for the next access check, so a user
- * added to the role afterwards inherits the apps with no per-user grant.
+ * added to the role afterwards inherits the decision with no per-user grant.
  */
 
 const PRIMARY_ROLES = [
@@ -46,6 +48,8 @@ export async function GET() {
       clientId: r.application.clientId,
       appName: r.application.name,
       role: r.role,
+      effect: r.effect,
+      overrideUsers: r.overrideUsers,
     })),
   });
 }
@@ -58,6 +62,8 @@ export async function POST(request: NextRequest) {
     primaryRole?: string;
     clientIds?: string[];
     role?: string;
+    effect?: string;
+    overrideUsers?: boolean;
   };
 
   const primaryRole = String(body.primaryRole ?? "").trim();
@@ -69,6 +75,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "clientIds is required" }, { status: 400 });
   }
   const role = body.role === "APP_ADMIN" ? "APP_ADMIN" : "USER";
+  const effect = String(body.effect ?? "").toUpperCase() === "DENY" ? "DENY" : "ALLOW";
+  const overrideUsers = body.overrideUsers === true;
 
   const apps = await prisma.application.findMany({ select: { id: true, clientId: true } });
   const idByClientId = new Map(apps.map((a) => [a.clientId.toLowerCase(), a.id]));
@@ -85,13 +93,20 @@ export async function POST(request: NextRequest) {
     applicationIds.map((applicationId) =>
       prisma.roleApplication.upsert({
         where: { primaryRole_applicationId: { primaryRole, applicationId } },
-        create: { primaryRole, applicationId, role },
-        update: { role },
+        create: { primaryRole, applicationId, role, effect, overrideUsers },
+        update: { role, effect, overrideUsers },
       })
     )
   );
 
-  return NextResponse.json({ ok: true, primaryRole, role, appsAffected: applicationIds.length });
+  return NextResponse.json({
+    ok: true,
+    primaryRole,
+    role,
+    effect,
+    overrideUsers,
+    appsAffected: applicationIds.length,
+  });
 }
 
 export async function DELETE(request: NextRequest) {
